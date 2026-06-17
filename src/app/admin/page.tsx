@@ -212,6 +212,13 @@ export default function AdminDashboard() {
       if (otpCode === '123456') {
         setIsAuthenticated(true);
         setAuthError('');
+        if (email.startsWith('wagner') || email.startsWith('admin')) {
+          setRole('DONO');
+          setActiveTab('dashboard');
+        } else {
+          setRole('FUNCIONARIO');
+          setActiveTab('vendas');
+        }
       } else {
         setAuthError('Código OTP SMS incorreto ou expirado.');
       }
@@ -603,16 +610,18 @@ export default function AdminDashboard() {
               >
                 <TrendingUp className="w-4 h-4" /> Painel Geral
               </button>
-              <button
-                onClick={() => setActiveTab('produtos')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
-                  activeTab === 'produtos'
-                    ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
-                }`}
-              >
-                <Package className="w-4 h-4" /> Produtos
-              </button>
+              {role === 'DONO' && (
+                <button
+                  onClick={() => setActiveTab('produtos')}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
+                    activeTab === 'produtos'
+                      ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                >
+                  <Package className="w-4 h-4" /> Produtos
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('promissorias')}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
@@ -653,16 +662,18 @@ export default function AdminDashboard() {
               >
                 <CreditCard className="w-4 h-4" /> Contas & Caixa
               </button>
-              <button
-                onClick={() => setActiveTab('configuracoes')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
-                  activeTab === 'configuracoes'
-                    ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
-                }`}
-              >
-                <Settings className="w-4 h-4" /> Configurações
-              </button>
+              {role === 'DONO' && (
+                <button
+                  onClick={() => setActiveTab('configuracoes')}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
+                    activeTab === 'configuracoes'
+                      ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" /> Configurações
+                </button>
+              )}
             </nav>
           </div>
 
@@ -675,130 +686,171 @@ export default function AdminDashboard() {
         <main className="flex-1 p-6 md:p-8 overflow-y-auto">
           
           {/* TAB 1: DASHBOARD */}
-          {activeTab === 'dashboard' && role === 'DONO' && (
-            <div className="space-y-8 animate-fadeIn">
-              
-              {/* Composed chart card */}
-              <div className={`border rounded-xl p-6 shadow-2xl ${
-                isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-              }`}>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-zinc-900/40">
-                  <div>
-                    <h2 className="text-lg font-black uppercase tracking-wider">Análise de Desempenho</h2>
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold block mt-0.5">Visão analítica de faturamento e fluxo de caixa</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-lg border border-zinc-850 text-[9px] font-black uppercase tracking-wider">
-                    <button className="px-2.5 py-1 rounded bg-[#d4af37] text-[#09090b] font-black cursor-pointer">Mensal</button>
-                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Semanal</button>
-                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Diário</button>
-                  </div>
-                </div>
-
-                <div className="h-80 w-full">
-                  {mounted ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={ANALYTICAL_CHART_DATA}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1f1f23" />
-                        <XAxis dataKey="name" stroke="#71717a" fontSize={10} tickLine={false} />
-                        <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#121214', border: '1px solid #27272a', borderRadius: '8px' }}
-                          labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontSize: '11px' }}
-                          itemStyle={{ fontSize: '11px' }}
-                        />
-                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }} />
-                        <Bar name="Vendas Totais" dataKey="vendas" fill="#d4af37" radius={[4, 4, 0, 0]} barSize={24} />
-                        <Line name="Receita Líquida" type="monotone" dataKey="receita" stroke="#f4f4f5" strokeWidth={2} activeDot={{ r: 6 }} />
-                        <Line name="Controle de Estoque" type="monotone" dataKey="estoque" stroke="#71717a" strokeWidth={1.5} strokeDasharray="4 4" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="w-full h-full bg-zinc-950/40 animate-pulse rounded-lg flex items-center justify-center text-zinc-600 text-xs">
-                      Carregando Gráficos Analíticos...
+          {activeTab === 'dashboard' && (
+            role === 'DONO' ? (
+              <div className="space-y-8 animate-fadeIn">
+                
+                {/* Composed chart card */}
+                <div className={`border rounded-xl p-6 shadow-2xl ${
+                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                }`}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-zinc-900/40">
+                    <div>
+                      <h2 className="text-lg font-black uppercase tracking-wider">Análise de Desempenho</h2>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold block mt-0.5">Visão analítica de faturamento e fluxo de caixa</span>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* KPI Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className={`border p-6 rounded-xl flex flex-col justify-between ${
-                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-                }`}>
-                  <div>
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Vendas Totais</span>
-                    <span className="text-2xl font-black text-[#d4af37]">R$ 1.5M</span>
-                  </div>
-                  <span className="text-[9px] text-green-500 font-bold bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20 mt-4 self-start">
-                    +18% Meta Comercial
-                  </span>
-                </div>
-                <div className={`border p-6 rounded-xl flex flex-col justify-between ${
-                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-                }`}>
-                  <div>
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Receita Líquida</span>
-                    <span className="text-2xl font-black text-[#d4af37]">R$ 1.5M</span>
-                  </div>
-                  <span className="text-[9px] text-zinc-500 font-semibold block mt-4">Faturamento Deduzido Custos</span>
-                </div>
-                <div className={`border p-6 rounded-xl flex flex-col justify-between ${
-                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-                }`}>
-                  <div>
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Média do Carrinho</span>
-                    <span className="text-2xl font-black text-white">R$ 330k</span>
-                  </div>
-                  <span className="text-[9px] text-[#d4af37] font-semibold block mt-4">Ticket Médio de Venda</span>
-                </div>
-                {/* Horizontal Category Distribution */}
-                <div className={`border p-6 rounded-xl flex flex-col justify-between ${
-                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-                }`}>
-                  <div>
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1.5">Vendas por Categoria</span>
-                    <div className="space-y-2.5">
-                      <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
-                        <span>Tênis</span>
-                        <span className="text-[#d4af37]">60%</span>
-                      </div>
-                      <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
-                        <div className="bg-[#d4af37] h-full" style={{ width: '60%' }} />
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
-                        <span>Vestuário</span>
-                        <span className="text-[#d4af37]">30%</span>
-                      </div>
-                      <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
-                        <div className="bg-[#d4af37] h-full" style={{ width: '30%' }} />
-                      </div>
+                    <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-lg border border-zinc-850 text-[9px] font-black uppercase tracking-wider">
+                      <button className="px-2.5 py-1 rounded bg-[#d4af37] text-[#09090b] font-black cursor-pointer">Mensal</button>
+                      <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Semanal</button>
+                      <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Diário</button>
                     </div>
                   </div>
+
+                  <div className="h-80 w-full">
+                    {mounted ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={ANALYTICAL_CHART_DATA}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f23" />
+                          <XAxis dataKey="name" stroke="#71717a" fontSize={10} tickLine={false} />
+                          <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#121214', border: '1px solid #27272a', borderRadius: '8px' }}
+                            labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontSize: '11px' }}
+                            itemStyle={{ fontSize: '11px' }}
+                          />
+                          <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }} />
+                          <Bar name="Vendas Totais" dataKey="vendas" fill="#d4af37" radius={[4, 4, 0, 0]} barSize={24} />
+                          <Line name="Receita Líquida" type="monotone" dataKey="receita" stroke="#f4f4f5" strokeWidth={2} activeDot={{ r: 6 }} />
+                          <Line name="Controle de Estoque" type="monotone" dataKey="estoque" stroke="#71717a" strokeWidth={1.5} strokeDasharray="4 4" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="w-full h-full bg-zinc-950/40 animate-pulse rounded-lg flex items-center justify-center text-zinc-600 text-xs">
+                        Carregando Gráficos Analíticos...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* KPI Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className={`border p-6 rounded-xl flex flex-col justify-between ${
+                    isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <div>
+                      <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Vendas Totais</span>
+                      <span className="text-2xl font-black text-[#d4af37]">R$ 1.5M</span>
+                    </div>
+                    <span className="text-[9px] text-green-500 font-bold bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20 mt-4 self-start">
+                      +18% Meta Comercial
+                    </span>
+                  </div>
+                  <div className={`border p-6 rounded-xl flex flex-col justify-between ${
+                    isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <div>
+                      <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Receita Líquida</span>
+                      <span className="text-2xl font-black text-[#d4af37]">R$ 1.5M</span>
+                    </div>
+                    <span className="text-[9px] text-zinc-500 font-semibold block mt-4">Faturamento Deduzido Custos</span>
+                  </div>
+                  <div className={`border p-6 rounded-xl flex flex-col justify-between ${
+                    isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <div>
+                      <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Média do Carrinho</span>
+                      <span className="text-2xl font-black text-white">R$ 330k</span>
+                    </div>
+                    <span className="text-[9px] text-[#d4af37] font-semibold block mt-4">Ticket Médio de Venda</span>
+                  </div>
+                  {/* Horizontal Category Distribution */}
+                  <div className={`border p-6 rounded-xl flex flex-col justify-between ${
+                    isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <div>
+                      <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest block mb-1.5">Vendas por Categoria</span>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                          <span>Tênis</span>
+                          <span className="text-[#d4af37]">60%</span>
+                        </div>
+                        <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
+                          <div className="bg-[#d4af37] h-full" style={{ width: '60%' }} />
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                          <span>Vestuário</span>
+                          <span className="text-[#d4af37]">30%</span>
+                        </div>
+                        <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
+                          <div className="bg-[#d4af37] h-full" style={{ width: '30%' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress and meta bar */}
+                <div className={`border p-6 rounded-xl ${
+                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                }`}>
+                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-zinc-900/40">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Progresso Metas Mensais</h3>
+                    <span className="text-xs font-black text-[#d4af37]">{progressPercent.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-zinc-950 border border-zinc-900 rounded-full h-3 overflow-hidden mb-4 mt-2">
+                    <div className="bg-[#d4af37] h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-zinc-500">
+                    <span>Faturamento Atual: R$ {faturamentoAtual.toLocaleString('pt-BR')}</span>
+                    <span>Objetivo Mensal: R$ {metaFaturamento.toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+
+              </div>
+            ) : (
+              <div className="space-y-8 animate-fadeIn">
+                <div className={`border p-6 rounded-xl shadow-lg ${
+                  isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                }`}>
+                  <h2 className="text-lg font-black uppercase tracking-wider text-[#d4af37]">Painel do Colaborador</h2>
+                  <p className="text-xs text-zinc-400 mt-2 font-medium">
+                    Bem-vindo ao painel operacional da PR Store. Você tem acesso restrito às operações do dia a dia.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                    <div className="bg-zinc-950 p-6 rounded-xl border border-zinc-900 flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Registrar Vendas</span>
+                        <p className="text-xs text-zinc-400 font-medium">Lance vendas realizadas fisicamente diretamente no PDV.</p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveTab('vendas')}
+                        className="bg-[#d4af37] text-[#09090b] font-black text-[10px] py-2.5 rounded-lg transition-all uppercase tracking-widest mt-6 cursor-pointer"
+                      >
+                        Ir para PDV
+                      </button>
+                    </div>
+
+                    <div className="bg-zinc-950 p-6 rounded-xl border border-zinc-900 flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest block mb-1">Promissórias</span>
+                        <p className="text-xs text-zinc-400 font-medium">Controle de clientes crediários e cobranças.</p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveTab('promissorias')}
+                        className="bg-zinc-900 border border-zinc-800 hover:border-[#d4af37] text-zinc-400 hover:text-white font-black text-[10px] py-2.5 rounded-lg transition-all uppercase tracking-widest mt-6 cursor-pointer"
+                      >
+                        Ver Crediários
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* Progress and meta bar */}
-              <div className={`border p-6 rounded-xl ${
-                isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-              }`}>
-                <div className="flex justify-between items-center mb-2 pb-2 border-b border-zinc-900/40">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Progresso Metas Mensais</h3>
-                  <span className="text-xs font-black text-[#d4af37]">{progressPercent.toFixed(1)}%</span>
-                </div>
-                <div className="w-full bg-zinc-950 border border-zinc-900 rounded-full h-3 overflow-hidden mb-4 mt-2">
-                  <div className="bg-[#d4af37] h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
-                </div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-zinc-500">
-                  <span>Faturamento Atual: R$ {faturamentoAtual.toLocaleString('pt-BR')}</span>
-                  <span>Objetivo Mensal: R$ {metaFaturamento.toLocaleString('pt-BR')}</span>
-                </div>
-              </div>
-
-            </div>
+            )
           )}
 
           {/* TAB 2: PRODUTOS (Ficha de Produto e Lista) */}
-          {activeTab === 'produtos' && (
+          {activeTab === 'produtos' && role === 'DONO' && (
             <div className="space-y-8 animate-fadeIn">
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1361,7 +1413,7 @@ export default function AdminDashboard() {
           )}
 
           {/* TAB 7: CONFIGURAÇÕES (Employees and RLS info) */}
-          {activeTab === 'configuracoes' && (
+          {activeTab === 'configuracoes' && role === 'DONO' && (
             <div className="space-y-8 animate-fadeIn">
               
               <div className={`border p-6 rounded-xl shadow-2xl ${

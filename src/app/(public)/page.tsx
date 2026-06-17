@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Filter, Clock, Sparkles, Phone, ShoppingCart, 
+  Filter, Sparkles, Phone, ShoppingCart, 
   Trash2, X, Send, HelpCircle, ArrowRight, CheckCircle2,
   Sun, Moon, Search, ShoppingBag, CreditCard, QrCode, Clipboard
 } from 'lucide-react';
@@ -203,11 +203,16 @@ export default function Home() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   
   // Checkout drawer multi-step state
-  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'details' | 'pix_screen'>('cart');
+  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'details' | 'card_form' | 'pix_screen'>('cart');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CARD'>('PIX');
   const [pixDetails, setPixDetails] = useState<{ qrCode: string; barcode: string; total: number; orderId: string } | null>(null);
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardError, setCardError] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
 
   // Success Modal State
@@ -340,6 +345,12 @@ export default function Home() {
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0 || !customerPhone) return;
+
+    if (paymentMethod === 'CARD') {
+      setCheckoutStep('card_form');
+      return;
+    }
+
     setIsCheckingOut(true);
 
     try {
@@ -355,7 +366,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: checkoutItems,
-          paymentMethod,
+          paymentMethod: 'PIX',
           clientPhone: customerPhone,
           clientName: customerName,
           shippingCost: shippingCost || 0,
@@ -365,32 +376,76 @@ export default function Home() {
 
       const data = await response.json();
       if (data.success) {
-        if (paymentMethod === 'CARD') {
-          if (data.url) {
-            window.location.href = data.url;
-          } else {
-            // Simulated direct success
-            setCheckoutSuccessInfo({ isOpen: true, orderId: data.pedidoId });
-            setCart([]);
-            setIsCartOpen(false);
-            setCheckoutStep('cart');
-          }
-        } else {
-          // PIX flow: show details screen
-          setPixDetails({
-            qrCode: data.qrCode,
-            barcode: data.barcode,
-            total: data.total,
-            orderId: data.pedidoId
-          });
-          setCheckoutStep('pix_screen');
-        }
+        // PIX flow: show details screen
+        setPixDetails({
+          qrCode: data.qrCode,
+          barcode: data.barcode,
+          total: data.total,
+          orderId: data.pedidoId
+        });
+        setCheckoutStep('pix_screen');
       } else {
         alert(data.error || 'Erro ao processar o checkout.');
       }
     } catch (err) {
       console.error(err);
       alert('Erro de conexão ao iniciar o checkout.');
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  const handleCardPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cart.length === 0 || !customerPhone) return;
+    setIsCheckingOut(true);
+    setCardError('');
+
+    const isRefused = cardNumber.replace(/\s/g, '').includes('4005');
+    const simulatedStatus = isRefused ? 'refused' : 'approved';
+
+    try {
+      const checkoutItems = cart.map(item => ({
+        id: item.product.id,
+        name: item.product.name,
+        price: item.product.promoPrice || item.product.price,
+        quantity: item.quantity,
+      }));
+
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: checkoutItems,
+          paymentMethod: 'CARD',
+          clientPhone: customerPhone,
+          clientName: customerName,
+          shippingCost: shippingCost || 0,
+          shippingMethod: shippingMethod || 'Retirada em Mãos',
+          simulatedCardStatus: simulatedStatus,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        if (data.url && !isRefused) {
+          window.location.href = data.url;
+        } else {
+          setCheckoutSuccessInfo({ isOpen: true, orderId: data.pedidoId });
+          setCart([]);
+          setIsCartOpen(false);
+          setCheckoutStep('cart');
+          setCardNumber('');
+          setCardName('');
+          setCardExpiry('');
+          setCardCvv('');
+        }
+      } else {
+        setCardError(data.error || 'Erro ao processar pagamento do cartão.');
+      }
+    } catch (err) {
+      console.error(err);
+      setCardError('Erro de conexão ao processar transação.');
     } finally {
       setIsCheckingOut(false);
     }
@@ -1122,6 +1177,100 @@ export default function Home() {
               </div>
             )}
 
+            {checkoutStep === 'card_form' && (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden animate-fadeIn">
+                <div>
+                  <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
+                    <button 
+                      onClick={() => setCheckoutStep('details')}
+                      className="text-zinc-500 hover:text-white text-xs font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                    >
+                      ← Voltar
+                    </button>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-[#f4f4f5]">Dados do Cartão</h3>
+                    <button onClick={() => setIsCartOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCardPaymentSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">Número do Cartão:</label>
+                      <input 
+                        type="text" 
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        placeholder="Ex: 4002 1234 5678 9010"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white font-mono"
+                        required
+                      />
+                      <span className="text-[8px] text-zinc-500 mt-1 block">Insira um número contendo &quot;4005&quot; para simular recusa bancária.</span>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">Nome Impresso:</label>
+                      <input 
+                        type="text" 
+                        value={cardName}
+                        onChange={(e) => setCardName(e.target.value)}
+                        placeholder="Ex: JOAO SILVA"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">Validade (MM/AA):</label>
+                        <input 
+                          type="text" 
+                          value={cardExpiry}
+                          onChange={(e) => setCardExpiry(e.target.value)}
+                          placeholder="Ex: 12/30"
+                          maxLength={5}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white text-center"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">CVV:</label>
+                        <input 
+                          type="text" 
+                          value={cardCvv}
+                          onChange={(e) => setCardCvv(e.target.value)}
+                          placeholder="123"
+                          maxLength={4}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white text-center font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {cardError && (
+                      <div className="text-[10px] font-bold text-red-500 bg-red-500/10 p-2.5 rounded border border-red-500/20 text-center mt-4">
+                        {cardError}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-zinc-500 bg-zinc-950/40 p-3 rounded-lg border border-zinc-900 mt-4">
+                      <div className="flex justify-between text-white font-bold">
+                        <span>Total a Pagar:</span>
+                        <span className="text-[#d4af37]">R$ {(getSubtotal() + (shippingCost || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isCheckingOut}
+                      className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-[#d4af37]/10 tracking-widest uppercase mt-6 cursor-pointer"
+                    >
+                      {isCheckingOut ? t.checkoutRedirecting : 'Pagar Agora'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {checkoutStep === 'pix_screen' && pixDetails && (
               <div className="flex-1 flex flex-col justify-between overflow-hidden text-center">
                 <div>
@@ -1174,7 +1323,7 @@ export default function Home() {
                     href={`https://wa.me/5545999999999?text=${encodeURIComponent(`Olá, realizei o pagamento Pix do pedido #${pixDetails.orderId} no valor de R$ ${pixDetails.total.toFixed(2)}. Segue o comprovante em anexo.`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full bg-green-600 text-white font-black text-xs py-3 rounded-lg hover:bg-green-500 transition-colors flex items-center justify-center gap-2 uppercase tracking-wider block text-center"
+                    className="w-full bg-green-600 text-white font-black text-xs py-3 rounded-lg hover:bg-green-500 transition-colors flex items-center justify-center gap-2 uppercase tracking-wider"
                   >
                     💬 Enviar Comprovante WhatsApp
                   </a>
