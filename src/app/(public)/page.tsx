@@ -35,18 +35,18 @@ const MOCK_PRODUCTS: Product[] = [
     category: 'Tenis',
     brand: 'Nike Jordan',
     sizes: ['40', '41', '42', '43'],
-    images: ['/next.svg'],
+    images: ['#jordan'],
     stock: 5,
   },
   {
     id: '2',
-    name: 'Supreme Box Logo Luxury Hoodie Black/Gold',
+    name: 'Supreme Box Logo Hoodie Black/Gold',
     slug: 'supreme-bogo-gold',
     price: 1499.90,
     category: 'Roupas',
     brand: 'Supreme',
     sizes: ['M', 'G', 'GG'],
-    images: ['/next.svg'],
+    images: ['#hoodie'],
     stock: 3,
   },
   {
@@ -58,7 +58,7 @@ const MOCK_PRODUCTS: Product[] = [
     category: 'Tenis',
     brand: 'Adidas',
     sizes: ['38', '39', '40', '41'],
-    images: ['/next.svg'],
+    images: ['#yeezy'],
     stock: 8,
   },
   {
@@ -69,7 +69,7 @@ const MOCK_PRODUCTS: Product[] = [
     category: 'Acessorios',
     brand: 'PR Store',
     sizes: ['Unico'],
-    images: ['/next.svg'],
+    images: ['#necklace'],
     stock: 12,
   },
   {
@@ -80,7 +80,7 @@ const MOCK_PRODUCTS: Product[] = [
     category: 'Acessorios',
     brand: 'Off-White',
     sizes: ['Unico'],
-    images: ['/next.svg'],
+    images: ['#belt'],
     stock: 2,
   }
 ];
@@ -117,7 +117,7 @@ export default function Home() {
   const [shippingMethod, setShippingMethod] = useState<string>('');
   
   // Promotion Countdown state
-  const [timeLeft, setTimeLeft] = useState({ hours: 11, minutes: 59, seconds: 59 });
+  const [timeLeft, setTimeLeft] = useState({ days: 1, hours: 19, minutes: 23, seconds: 47 });
 
   // Load lead modal after 5 seconds
   useEffect(() => {
@@ -135,14 +135,13 @@ export default function Home() {
       setTimeLeft(prev => {
         if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
         if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return { hours: 12, minutes: 0, seconds: 0 }; // Loop back for mock purposes
+        if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        if (prev.days > 0) return { days: prev.days - 1, hours: 23, minutes: 59, seconds: 59 };
+        return { days: 1, hours: 12, minutes: 0, seconds: 0 };
       });
     }, 1000);
     return () => clearInterval(interval);
   }, []);
-
-
 
   // Lead Submission
   const handleLeadSubmit = (e: React.FormEvent) => {
@@ -185,7 +184,6 @@ export default function Home() {
   // Mock Shipping Calculation
   const calculateShipping = () => {
     if (cepInput.length >= 8) {
-      // Local boundary ZIP code shipping mock
       if (cepInput.startsWith('85')) {
         setShippingCost(15.00);
         setShippingMethod('Moto Frete Regional (Expresso)');
@@ -239,7 +237,6 @@ export default function Home() {
     setChatMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
     setChatInput('');
 
-    // Mock AI reply simulating client-side GPT assistant
     setTimeout(() => {
       let reply = 'Interessante! Nossos tênis da Nike e Adidas estão com alta procura. Você pode conferir os tamanhos na vitrine.';
       if (userMsg.toLowerCase().includes('tamanho') || userMsg.toLowerCase().includes('grade')) {
@@ -251,64 +248,173 @@ export default function Home() {
     }, 1000);
   };
 
-  return (
-    <div className="flex-1 bg-[#09090b]">
-      
-      {/* Banner / Promotion Highlight */}
-      <section className="relative bg-gradient-to-r from-amber-500/10 via-yellow-600/5 to-transparent border-y border-zinc-800/60 py-12 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="flex-1 text-center md:text-left">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs font-bold uppercase tracking-wider mb-4">
-              <Sparkles className="w-3.5 h-3.5" /> Promoção Relâmpago Exclusiva
-            </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[#f4f4f5] leading-tight max-w-lg">
-              Estilo Streetwear de Luxo com Preço Especial Sincronizado
-            </h2>
-            <p className="text-zinc-400 mt-2 text-sm max-w-md">
-              Coleções exclusivas limitadas. Descontos de até 20% aplicados no catálogo abaixo.
-            </p>
-          </div>
+  // Render vector placeholders for luxury streetwear catalog items
+  const renderProductImage = (imageId: string) => {
+    switch (imageId) {
+      case '#jordan':
+        return (
+          <svg className="w-40 h-40 text-amber-500/90 transition-transform duration-500 group-hover:scale-110 drop-shadow-[0_10px_15px_rgba(212,175,55,0.2)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9s2.015-9 4.5-9m0 0a9.015 9.015 0 0 1 8.716 6.747M12 3a9.015 9.015 0 0 0-8.716 6.747" />
+            <path d="M19 12H5M12 19V5M16 10l-4 4-4-4" />
+          </svg>
+        );
+      case '#hoodie':
+        return (
+          <svg className="w-36 h-36 text-zinc-400/80 transition-transform duration-500 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 21m3.813-5.096L15 21m-4.5-7.5L12 9.75M9 6.75h6m-6 3h6m-9 9.5a1.5 1.5 0 0 0 1.5 1.5h10.5a1.5 1.5 0 0 0 1.5-1.5V6.75A2.25 2.25 0 0 0 15.75 4.5H8.25A2.25 2.25 0 0 0 6 6.75v10.5Z" />
+          </svg>
+        );
+      case '#yeezy':
+        return (
+          <svg className="w-40 h-40 text-amber-500/70 transition-transform duration-500 group-hover:scale-110 drop-shadow-[0_10px_15px_rgba(255,255,255,0.05)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.467 5.99 5.99 0 0 0-1.925 3.546 5.974 5.974 0 0 1-2.133-1A3.75 3.75 0 0 0 12 18Z" />
+          </svg>
+        );
+      case '#necklace':
+        return (
+          <svg className="w-32 h-32 text-amber-400 transition-transform duration-500 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 14c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3Z" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className="w-36 h-36 text-zinc-500 transition-transform duration-500 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 17v-4h6v4M12 9v4" />
+          </svg>
+        );
+    }
+  };
 
-          {/* Countdown Clock */}
-          <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-6 flex flex-col items-center justify-center min-w-[280px]">
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-3 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-amber-500" /> Expira em:
+  return (
+    <div className="flex-1 bg-[#09090b] text-[#f4f4f5]">
+      
+      {/* 1. Lightning Deal / Promoção Relâmpago Section */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#121214] via-[#09090b] to-[#09090b] border-b border-zinc-900 py-16 px-6 lg:px-12">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          
+          {/* Details & Clock */}
+          <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-left">
+            <span className="inline-flex self-center lg:self-start items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] text-xs font-black uppercase tracking-widest mb-6 shadow-lg shadow-[#d4af37]/5 animate-pulse">
+              <Sparkles className="w-3.5 h-3.5" /> Lightning Deal
             </span>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-black text-amber-500 tracking-tighter">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-[#f4f4f5] leading-none mb-4">
+              Promoção Relâmpago <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-500 to-[#d4af37]">
+                Coleção Streetwear
+              </span>
+            </h1>
+            <p className="text-zinc-400 mt-2 text-sm lg:text-base max-w-lg mb-8 leading-relaxed">
+              Consiga itens selecionados e importados da marca oficial com o estoque físico sincronizado direto em tempo real.
+            </p>
+
+            {/* Premium Countdown Clock */}
+            <div className="flex justify-center lg:justify-start items-center gap-4 mb-8">
+              <div className="flex flex-col items-center bg-zinc-900/90 border border-zinc-800 rounded-xl px-4 py-3 min-w-[70px]">
+                <span className="text-2xl lg:text-3xl font-black text-[#d4af37] tracking-tighter">
+                  {timeLeft.days.toString().padStart(2, '0')}
+                </span>
+                <span className="text-[9px] text-zinc-500 uppercase font-extrabold mt-1">Dias</span>
+              </div>
+              <span className="text-xl font-bold text-zinc-700">:</span>
+              <div className="flex flex-col items-center bg-zinc-900/90 border border-zinc-800 rounded-xl px-4 py-3 min-w-[70px]">
+                <span className="text-2xl lg:text-3xl font-black text-[#d4af37] tracking-tighter">
                   {timeLeft.hours.toString().padStart(2, '0')}
                 </span>
-                <span className="text-[9px] text-zinc-500 uppercase font-semibold">Horas</span>
+                <span className="text-[9px] text-zinc-500 uppercase font-extrabold mt-1">Horas</span>
               </div>
-              <span className="text-2xl font-black text-zinc-600">:</span>
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-black text-amber-500 tracking-tighter">
+              <span className="text-xl font-bold text-zinc-700">:</span>
+              <div className="flex flex-col items-center bg-zinc-900/90 border border-zinc-800 rounded-xl px-4 py-3 min-w-[70px]">
+                <span className="text-2xl lg:text-3xl font-black text-[#d4af37] tracking-tighter">
                   {timeLeft.minutes.toString().padStart(2, '0')}
                 </span>
-                <span className="text-[9px] text-zinc-500 uppercase font-semibold">Minutos</span>
+                <span className="text-[9px] text-zinc-500 uppercase font-extrabold mt-1">Minutos</span>
               </div>
-              <span className="text-2xl font-black text-zinc-600">:</span>
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-black text-amber-500 tracking-tighter">
+              <span className="text-xl font-bold text-zinc-700">:</span>
+              <div className="flex flex-col items-center bg-zinc-900/90 border border-zinc-800 rounded-xl px-4 py-3 min-w-[70px]">
+                <span className="text-2xl lg:text-3xl font-black text-[#d4af37] tracking-tighter">
                   {timeLeft.seconds.toString().padStart(2, '0')}
                 </span>
-                <span className="text-[9px] text-zinc-500 uppercase font-semibold">Segundos</span>
+                <span className="text-[9px] text-zinc-500 uppercase font-extrabold mt-1">Segundos</span>
               </div>
             </div>
+
+            {/* Quick checkout CTA */}
+            <div className="flex justify-center lg:justify-start">
+              <button 
+                onClick={() => {
+                  const element = document.getElementById('catalog');
+                  element?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-[#d4af37] hover:bg-amber-400 text-[#09090b] font-black text-xs px-8 py-4 rounded-lg tracking-widest uppercase transition-all shadow-lg shadow-[#d4af37]/15 flex items-center gap-2"
+              >
+                Comprar Agora <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
+          {/* Large Prototype Sneaker Graphic representation */}
+          <div className="lg:col-span-5 flex justify-center items-center relative">
+            <div className="absolute w-72 h-72 rounded-full bg-[#d4af37]/5 blur-3xl -z-10" />
+            <div className="bg-gradient-to-tr from-zinc-900 to-zinc-950/60 border border-zinc-800 p-8 rounded-2xl shadow-2xl relative w-full max-w-sm aspect-square flex items-center justify-center group overflow-hidden">
+              <div className="absolute top-4 right-4 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-md text-[10px] font-black text-[#d4af37] tracking-wider uppercase">
+                Edição de Luxo
+              </div>
+              <svg className="w-52 h-52 text-[#d4af37] drop-shadow-[0_15px_30px_rgba(212,175,55,0.25)] transition-transform duration-700 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9s2.015-9 4.5-9m0 0a9.015 9.015 0 0 1 8.716 6.747M12 3a9.015 9.015 0 0 0-8.716 6.747" />
+              </svg>
+            </div>
+          </div>
+
         </div>
       </section>
 
-      {/* Main Grid: Filters & Products */}
-      <section className="max-w-7xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-8 border-b border-zinc-900 pb-4">
-          <h3 className="text-xl font-bold text-[#f4f4f5]">Vitrine Streetwear</h3>
+      {/* 2. Horizontal Categories list Carousel */}
+      <section className="max-w-7xl mx-auto px-6 py-10">
+        <div className="flex flex-col mb-6">
+          <h2 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5]">Categorias</h2>
+          <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold block mt-0.5">Pesquisar roupas e acessórios</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: 'Todas Peças', id: 'All', icon: '🛍️' },
+            { label: 'Calçados', id: 'Tenis', icon: '👟' },
+            { label: 'Vestuário', id: 'Roupas', icon: '👕' },
+            { label: 'Acessórios', id: 'Acessorios', icon: '🕶️' }
+          ].map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all ${
+                selectedCategory === cat.id 
+                  ? 'bg-zinc-900 border-[#d4af37] text-[#d4af37]' 
+                  : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <span className="text-xl">{cat.icon}</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">{cat.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. Catalog Section with Product Grid */}
+      <section id="catalog" className="max-w-7xl mx-auto px-6 py-12 scroll-mt-20">
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-900">
+          <div>
+            <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5]">Vitrine Streetwear</h3>
+            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold mt-0.5 block">
+              Mostrando {products.length} itens encontrados
+            </span>
+          </div>
           <button 
             onClick={() => setIsFilterOpen(true)}
-            className="flex items-center gap-2 border border-zinc-800 rounded-lg px-4 py-2 text-xs font-semibold hover:border-amber-500/50 hover:text-amber-500 transition-colors"
+            className="flex items-center gap-2 border border-zinc-800 hover:border-[#d4af37]/40 hover:text-[#d4af37] rounded-lg px-4 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors bg-zinc-950"
           >
-            <Filter className="w-4 h-4" /> Filtros Dinâmicos
+            <Filter className="w-3.5 h-3.5" /> Filtros
           </button>
         </div>
 
@@ -321,54 +427,55 @@ export default function Home() {
             return (
               <div 
                 key={product.id}
-                className="bg-[#121214] border border-zinc-800/60 rounded-xl overflow-hidden shadow-lg group hover:border-amber-500/30 transition-all flex flex-col justify-between"
+                className="bg-[#121214] border border-zinc-800/80 rounded-xl overflow-hidden shadow-xl group hover:border-[#d4af37]/30 transition-all duration-300 flex flex-col justify-between"
               >
-                {/* Image Placeholder Container */}
-                <div className="bg-zinc-900/60 h-64 flex items-center justify-center relative border-b border-zinc-900">
-                  <div className="text-zinc-600 font-bold text-center p-4">
-                    <span className="text-4xl block mb-2">👟</span>
-                    <span className="text-xs uppercase tracking-widest block">{product.brand}</span>
-                  </div>
+                {/* Visual Image container */}
+                <div className="bg-zinc-950/80 h-64 flex items-center justify-center relative border-b border-zinc-900/60 overflow-hidden">
+                  {renderProductImage(product.images[0])}
                   {hasPromo && (
-                    <span className="absolute top-4 left-4 bg-amber-500 text-[#09090b] text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                    <span className="absolute top-4 left-4 bg-[#d4af37] text-[#09090b] text-[9px] font-black uppercase px-2.5 py-1 rounded-full tracking-wider shadow-lg shadow-[#d4af37]/10">
                       OFF
                     </span>
                   )}
+                  <span className="absolute bottom-4 right-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 px-2 py-0.5 rounded text-[9px] text-zinc-500 font-bold uppercase tracking-widest">
+                    Qtd: {product.stock}
+                  </span>
                 </div>
 
                 {/* Details */}
                 <div className="p-6 flex-1 flex flex-col justify-between">
                   <div>
-                    <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest block mb-1">
-                      {product.category}
+                    <span className="text-[9px] text-[#d4af37] font-black uppercase tracking-widest block mb-1">
+                      {product.brand}
                     </span>
-                    <h4 className="text-base font-bold text-[#f4f4f5] group-hover:text-amber-400 transition-colors line-clamp-2">
+                    <h4 className="text-sm font-black text-[#f4f4f5] group-hover:text-[#d4af37] transition-colors leading-snug line-clamp-2">
                       {product.name}
                     </h4>
                     
                     {/* Price block */}
                     <div className="mt-3 flex items-baseline gap-2">
-                      <span className="text-lg font-black text-amber-500">
-                        R$ {priceToDisplay.toFixed(2)}
+                      <span className="text-lg font-black text-[#d4af37]">
+                        R$ {priceToDisplay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       {hasPromo && (
-                        <span className="text-xs text-zinc-500 line-through">
-                          R$ {product.price.toFixed(2)}
+                        <span className="text-xs text-zinc-600 line-through">
+                          R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-zinc-800/60">
-                    <span className="text-[10px] text-zinc-500 uppercase block mb-2 font-bold tracking-wider">
-                      Escolha o tamanho:
+                  {/* Size buttons */}
+                  <div className="mt-6 pt-4 border-t border-zinc-900">
+                    <span className="text-[9px] text-zinc-500 uppercase block mb-2 font-black tracking-widest">
+                      Adicionar à Sacola:
                     </span>
                     <div className="flex flex-wrap gap-2">
                       {product.sizes.map(size => (
                         <button
                           key={size}
                           onClick={() => addToCart(product, size)}
-                          className="px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-500 bg-zinc-950 text-xs font-semibold transition-all hover:text-amber-500"
+                          className="px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-[#d4af37] hover:text-[#d4af37] bg-zinc-950 text-[10px] font-bold transition-all"
                         >
                           {size}
                         </button>
@@ -382,7 +489,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* LEAD MODAL (WhatsApp capture) */}
+      {/* 4. WhatsApp capturing popup dialog */}
       {isLeadOpen && (
         <div className="fixed inset-0 z-50 bg-[#09090b]/80 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-[#121214] border border-zinc-800 rounded-xl p-8 max-w-md w-full relative shadow-2xl">
@@ -395,29 +502,29 @@ export default function Home() {
 
             {!leadSubmitted ? (
               <form onSubmit={handleLeadSubmit} className="text-center">
-                <span className="text-3xl block mb-4">🎁</span>
-                <h3 className="text-xl font-extrabold text-[#f4f4f5]">Libere 10% de Desconto</h3>
+                <span className="text-3xl block mb-4">👑</span>
+                <h3 className="text-xl font-black text-[#f4f4f5] uppercase tracking-wider">Membro PR Store</h3>
                 <p className="text-xs text-zinc-400 mt-2 max-w-xs mx-auto leading-relaxed">
-                  Digite seu WhatsApp abaixo para receber novidades exclusivas e destravar seu cupom de boas-vindas.
+                  Digite seu WhatsApp abaixo para receber novidades exclusivas e destravar um cupom de 10% de boas-vindas.
                 </p>
 
                 <div className="mt-6 flex flex-col gap-3">
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
-                      <Phone className="w-4 h-4" />
+                      <Phone className="w-4 h-4 text-[#d4af37]" />
                     </span>
                     <input 
                       type="tel"
                       value={leadPhone}
                       onChange={(e) => setLeadPhone(e.target.value)}
                       placeholder="WhatsApp (ex: 4599999999)"
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:outline-none transition-colors"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-4 text-xs focus:border-[#d4af37] focus:outline-none transition-colors text-white"
                       required
                     />
                   </div>
                   <button 
                     type="submit"
-                    className="w-full bg-amber-500 text-[#09090b] font-bold text-sm py-2.5 rounded-lg hover:bg-amber-400 transition-colors"
+                    className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
                   >
                     Resgatar Cupom de Luxo
                   </button>
@@ -425,8 +532,8 @@ export default function Home() {
               </form>
             ) : (
               <div className="text-center py-6">
-                <CheckCircle2 className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-[#f4f4f5]">Cupom Ativado!</h3>
+                <CheckCircle2 className="w-12 h-12 text-[#d4af37] mx-auto mb-4" />
+                <h3 className="text-lg font-black text-[#f4f4f5] uppercase tracking-wider">Membro Ativado!</h3>
                 <p className="text-xs text-zinc-400 mt-2">
                   Seu cupom de 10% foi registrado. Use nas compras finalizadas hoje.
                 </p>
@@ -436,13 +543,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* FILTER DRAWER */}
+      {/* 5. Filter sidebar Drawer Sheet */}
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 bg-[#09090b]/80 backdrop-blur-sm flex justify-end">
           <div className="bg-[#121214] border-l border-zinc-800 w-full max-w-sm h-full p-8 flex flex-col justify-between shadow-2xl">
             <div>
               <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
-                <h3 className="text-lg font-extrabold text-[#f4f4f5]">Filtros do Catálogo</h3>
+                <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5]">Filtros do Catálogo</h3>
                 <button onClick={() => setIsFilterOpen(false)} className="text-zinc-500 hover:text-white">
                   <X className="w-5 h-5" />
                 </button>
@@ -450,7 +557,7 @@ export default function Home() {
 
               {/* Category selector */}
               <div className="mb-6">
-                <h4 className="text-xs font-bold uppercase text-zinc-500 tracking-wider mb-3">Categorias</h4>
+                <h4 className="text-xs font-black uppercase text-zinc-500 tracking-wider mb-3">Categorias</h4>
                 <div className="flex flex-col gap-2">
                   {['All', 'Roupas', 'Tenis', 'Acessorios'].map(cat => (
                     <button
@@ -458,11 +565,11 @@ export default function Home() {
                       onClick={() => setSelectedCategory(cat)}
                       className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all ${
                         selectedCategory === cat 
-                          ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' 
+                          ? 'bg-[#d4af37]/10 border-[#d4af37]/50 text-[#d4af37]' 
                           : 'border-zinc-800/80 hover:border-zinc-700 bg-zinc-950 text-zinc-400'
                       }`}
                     >
-                      {cat === 'All' ? 'Todas as Categorias' : cat === 'Tenis' ? 'Tênis' : cat}
+                      {cat === 'All' ? 'Todas as Categorias' : cat === 'Tenis' ? 'Tênis' : cat === 'Roupas' ? 'Vestuário' : 'Acessórios'}
                     </button>
                   ))}
                 </div>
@@ -470,7 +577,7 @@ export default function Home() {
 
               {/* Brand selector */}
               <div>
-                <h4 className="text-xs font-bold uppercase text-zinc-500 tracking-wider mb-3">Marcas</h4>
+                <h4 className="text-xs font-black uppercase text-zinc-500 tracking-wider mb-3">Marcas</h4>
                 <div className="flex flex-col gap-2">
                   {['All', 'Nike Jordan', 'Supreme', 'Adidas', 'PR Store', 'Off-White'].map(brand => (
                     <button
@@ -478,7 +585,7 @@ export default function Home() {
                       onClick={() => setSelectedBrand(brand)}
                       className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all ${
                         selectedBrand === brand 
-                          ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' 
+                          ? 'bg-[#d4af37]/10 border-[#d4af37]/50 text-[#d4af37]' 
                           : 'border-zinc-800/80 hover:border-zinc-700 bg-zinc-950 text-zinc-400'
                       }`}
                     >
@@ -491,7 +598,7 @@ export default function Home() {
 
             <button 
               onClick={() => setIsFilterOpen(false)}
-              className="w-full bg-amber-500 text-[#09090b] text-xs font-bold py-3 rounded-lg hover:bg-amber-400 transition-colors"
+              className="w-full bg-[#d4af37] text-[#09090b] text-xs font-black py-3.5 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
             >
               Aplicar Filtros
             </button>
@@ -499,14 +606,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* SHOPPING CART DRAWER */}
+      {/* 6. Shopping Cart Sheet */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-[#09090b]/80 backdrop-blur-sm flex justify-end">
           <div className="bg-[#121214] border-l border-zinc-800 w-full max-w-md h-full p-8 flex flex-col justify-between shadow-2xl">
             <div className="flex-1 flex flex-col overflow-hidden">
               <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
-                <h3 className="text-lg font-extrabold text-[#f4f4f5] flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-amber-500" /> Sacola de Compras
+                <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5] flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-[#d4af37]" /> Sacola de Compras
                 </h3>
                 <button onClick={() => setIsCartOpen(false)} className="text-zinc-500 hover:text-white">
                   <X className="w-5 h-5" />
@@ -523,18 +630,18 @@ export default function Home() {
                 ) : (
                   cart.map((item, idx) => (
                     <div key={idx} className="flex gap-4 p-3 bg-zinc-900/60 border border-zinc-800/60 rounded-xl relative">
-                      <div className="w-16 h-16 bg-zinc-800 rounded-lg flex items-center justify-center text-2xl">
-                        👟
+                      <div className="w-16 h-16 bg-zinc-950 rounded-lg flex items-center justify-center text-2xl border border-zinc-800">
+                        {item.product.images[0] === '#jordan' ? '👟' : item.product.images[0] === '#hoodie' ? '👕' : '💎'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-xs font-bold text-[#f4f4f5] truncate">{item.product.name}</h4>
-                        <span className="text-[10px] text-amber-500 font-bold uppercase block mt-1">
+                        <span className="text-[10px] text-[#d4af37] font-black uppercase block mt-1">
                           Tamanho: {item.selectedSize}
                         </span>
                         <div className="flex justify-between items-baseline mt-2">
-                          <span className="text-xs text-zinc-500">Qtd: {item.quantity}</span>
-                          <span className="text-xs font-black text-amber-500">
-                            R$ {((item.product.promoPrice || item.product.price) * item.quantity).toFixed(2)}
+                          <span className="text-xs text-zinc-500 font-medium">Qtd: {item.quantity}</span>
+                          <span className="text-xs font-black text-[#d4af37]">
+                            R$ {((item.product.promoPrice || item.product.price) * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
@@ -554,7 +661,7 @@ export default function Home() {
             <div className="border-t border-zinc-800/80 pt-6 mt-6">
               {/* Shipping Calculator */}
               <div className="mb-4">
-                <span className="text-[10px] text-zinc-500 uppercase block mb-1.5 font-bold tracking-wider">
+                <span className="text-[10px] text-zinc-500 uppercase block mb-1.5 font-black tracking-widest">
                   Cálculo de Envio (CEP):
                 </span>
                 <div className="flex gap-2">
@@ -564,34 +671,34 @@ export default function Home() {
                     onChange={(e) => setCepInput(e.target.value)}
                     placeholder="Ex: 85851000"
                     maxLength={8}
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-xs focus:border-amber-500 focus:outline-none"
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-xs focus:border-[#d4af37] focus:outline-none text-white"
                   />
                   <button 
                     onClick={calculateShipping}
-                    className="bg-zinc-800 border border-zinc-700 hover:border-amber-500 hover:text-amber-500 text-xs px-3 rounded-lg transition-colors font-semibold"
+                    className="bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] hover:text-[#d4af37] text-xs px-3 rounded-lg transition-colors font-bold uppercase tracking-wider"
                   >
                     Calcular
                   </button>
                 </div>
                 {shippingCost !== null && (
-                  <div className="mt-2 text-[11px] text-zinc-400 flex justify-between items-center bg-zinc-900/40 p-2 rounded border border-zinc-800/40">
+                  <div className="mt-2 text-[11px] text-zinc-400 flex justify-between items-center bg-zinc-900/40 p-2.5 rounded border border-zinc-800/40">
                     <span>{shippingMethod}</span>
-                    <span className="font-bold text-amber-500">R$ {shippingCost.toFixed(2)}</span>
+                    <span className="font-black text-[#d4af37]">R$ {shippingCost.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
               {/* Subtotal */}
               <div className="flex justify-between items-baseline mb-6">
-                <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Subtotal:</span>
-                <span className="text-2xl font-black text-amber-500">R$ {getSubtotal().toFixed(2)}</span>
+                <span className="text-xs text-zinc-400 font-black uppercase tracking-wider">Subtotal:</span>
+                <span className="text-2xl font-black text-[#d4af37]">R$ {getSubtotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
 
               {/* Actions */}
               <button 
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || isCheckingOut}
-                className="w-full bg-amber-500 text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+                className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-[#d4af37]/10 tracking-widest uppercase"
               >
                 {isCheckingOut ? 'Redirecionando...' : 'Finalizar Compra Segura'} <ArrowRight className="w-4 h-4" />
               </button>
@@ -600,7 +707,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* FLOATING AI CHAT ASSISTANT WIDGET */}
+      {/* 7. Floating support Chat & WhatsApp Widget */}
       <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
         {/* Chat window */}
         {isChatOpen && (
@@ -610,7 +717,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">🤖</span>
                 <div>
-                  <h4 className="text-xs font-bold text-[#f4f4f5]">PR Support Agent</h4>
+                  <h4 className="text-xs font-black text-[#f4f4f5] uppercase tracking-wider">PR Support Agent</h4>
                   <span className="text-[9px] text-green-500 font-semibold block -mt-0.5">Online Serverless</span>
                 </div>
               </div>
@@ -629,7 +736,7 @@ export default function Home() {
                   <div 
                     className={`max-w-[80%] rounded-lg p-2.5 text-xs leading-relaxed ${
                       msg.sender === 'user' 
-                        ? 'bg-amber-500 text-[#09090b] font-semibold rounded-br-none' 
+                        ? 'bg-[#d4af37] text-[#09090b] font-black rounded-br-none' 
                         : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-bl-none'
                     }`}
                   >
@@ -646,11 +753,11 @@ export default function Home() {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Perguntar sobre estoque ou grade..."
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none"
+                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs focus:border-[#d4af37] focus:outline-none text-white"
               />
               <button 
                 type="submit"
-                className="bg-amber-500 hover:bg-amber-400 text-[#09090b] p-1.5 rounded-lg transition-colors"
+                className="bg-[#d4af37] hover:bg-amber-400 text-[#09090b] p-1.5 rounded-lg transition-colors"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -671,7 +778,7 @@ export default function Home() {
           </a>
           <button 
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center shadow-lg hover:bg-amber-400 transition-colors border border-amber-600/30 text-[#09090b]"
+            className="w-12 h-12 rounded-full bg-[#d4af37] flex items-center justify-center shadow-lg hover:bg-amber-400 transition-colors border border-amber-600/30 text-[#09090b]"
           >
             <HelpCircle className="w-6 h-6" />
           </button>
