@@ -1,0 +1,130 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("SUPABASE_SERVICE_ROLE_KEY") // Conexão direta segura para migrações
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  DONO
+  GERENTE
+  FUNCIONARIO
+}
+
+enum PaymentMethod {
+  PIX
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  BOLETO
+  PROMISSORIA
+}
+
+enum ShippingMethod {
+  CORREIOS
+  MOTO_FRETE
+  RETIRADA
+}
+
+model Usuario {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  phone         String   @unique // Usado para verificação 2FA via SMS
+  password      String   // Senha criptografada (Hash)
+  role          Role     @default(FUNCIONARIO)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  vendasPresenciais Venda[] @relation("Vendedor")
+}
+
+model Cliente {
+  id        String   @id @default(uuid())
+  name      String?
+  phone     String   @unique // Identificador principal capturado no modal do WhatsApp
+  createdAt DateTime @default(now())
+  
+  pedidos      Pedido[]
+  promissorias Promissoria[]
+}
+
+model Produto {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique // URL amigável otimizada para SEO Técnico
+  description String
+  price       Float
+  promoPrice  Float?   // Preço de promoção relâmpago
+  promoUntil  DateTime? // Data/Hora limite para expiração da promoção relâmpago
+  category    String   // Roupas, Tênis, Acessórios
+  brand       String   // Filtro dinâmico por Marca (Ex: Nike, Adidas)
+  sizes       String[] // Grade de tamanhos disponíveis
+  images      String[] // URLs das mídias tratadas e hospedadas no Firebase Storage
+  stock       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  itensPedido ItemPedido[]
+
+  @@index([category, brand]) // Índice relacional para acelerar buscas do catálogo no Supabase
+  @@index([slug])
+}
+
+model Pedido {
+  id             String         @id @default(uuid())
+  clienteId      String
+  total          Float
+  status         String         @default("PENDENTE")
+  paymentMethod  PaymentMethod
+  shippingMethod ShippingMethod
+  shippingCost   Float          @default(0.0)
+  createdAt      DateTime       @default(now())
+  
+  cliente        Cliente        @relation(fields: [clienteId], references: [id])
+  itens          ItemPedido[]
+}
+
+model ItemPedido {
+  id        String  @id @default(uuid())
+  pedidoId  String
+  produtoId String
+  quantity  Int
+  price     Float   // Salva o preço cobrado no momento da venda
+
+  pedido    Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  produto   Produto @relation(fields: [produtoId], references: [id])
+}
+
+model Venda {
+  id            String        @id @default(uuid())
+  vendedorId    String?       // Se nulo, foi venda direta online pelo e-commerce
+  total         Float
+  paymentMethod PaymentMethod
+  isPresencial  Boolean       @default(false) // Diferencia PDV de Loja Online
+  createdAt     DateTime      @default(now())
+
+  vendedor      Usuario?      @relation("Vendedor", fields: [vendedorId], references: [id])
+}
+
+model Promissoria {
+  id         String   @id @default(uuid())
+  clienteId  String
+  totalDebt  Float    // Valor acumulado em aberto "No Fio"
+  dueDate    DateTime // Data de vencimento limite
+  isOverdue  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+}
+
+model RegistroCaixa {
+  id          String   @id @default(uuid())
+  openedAt    DateTime @default(now())
+  closedAt    DateTime?
+  initialAmt  Float
+  finalAmt    Float?
+  isBalanced  Boolean  @default(false) // "Se o caixa bateu no final do dia"
+  expenses    Float    @default(0.0)   // Abatimento de custos fixos e variáveis
+}
