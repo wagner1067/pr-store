@@ -42,3 +42,5 @@ next-env.d.ts
 
 # agents configuration containing secrets
 .agents/mcp_config.json
+
+.vercel
