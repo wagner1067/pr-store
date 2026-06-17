@@ -161,6 +161,42 @@ export default function AdminDashboard() {
     setMounted(true);
   }, []);
 
+  // Fetch live admin data on auth
+  useEffect(() => {
+    if (isAuthenticated) {
+      // 1. Fetch sales, debtors, and clients
+      fetch('/api/admin')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setSales(data.sales);
+            setDebtors(data.debtors);
+            setClients(data.clients);
+          }
+        })
+        .catch(err => console.error('Error fetching admin data:', err));
+
+      // 2. Fetch products
+      fetch('/api/products')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.products) {
+            setProducts(data.products.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              brand: p.brand,
+              stock: p.stock,
+              price: p.price,
+              category: p.category,
+              image: p.images[0] || '👟',
+              sizes: p.sizes,
+            })));
+          }
+        })
+        .catch(err => console.error('Error fetching products:', err));
+    }
+  }, [isAuthenticated]);
+
   // Auth check helper
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,101 +229,177 @@ export default function AdminDashboard() {
   };
 
   // Product Registry handler (Ficha de Produto)
-  const handleProductSubmit = (e: React.FormEvent) => {
+  const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (prodName && prodPrice && prodStock) {
-      const newProd: Product = {
-        id: (products.length + 1).toString(),
-        name: prodName,
-        price: parseFloat(prodPrice),
-        stock: parseInt(prodStock),
-        category: prodCategory,
-        brand: prodBrand || 'PR Store',
-        image: selectedImage,
-        sizes: prodSizes.split(',').map(s => s.trim())
-      };
+      try {
+        const response = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: prodName,
+            price: parseFloat(prodPrice),
+            stock: parseInt(prodStock),
+            category: prodCategory,
+            brand: prodBrand || 'PR Store',
+            image: selectedImage,
+            sizes: prodSizes.split(',').map(s => s.trim())
+          }),
+        });
 
-      setProducts(prev => [newProd, ...prev]);
-      setProductFormSuccess(true);
-      setTimeout(() => {
-        setProductFormSuccess(false);
-        setProdName('');
-        setProdPrice('');
-        setProdStock('');
-        setProdBrand('');
-        setProdSizes('39, 40, 41');
-        setSelectedImage('👟');
-      }, 1500);
+        const data = await response.json();
+        if (data.success) {
+          const newProd: Product = {
+            id: data.product.id,
+            name: data.product.name,
+            price: data.product.price,
+            stock: data.product.stock,
+            category: data.product.category,
+            brand: data.product.brand,
+            image: data.product.images[0] || '👟',
+            sizes: data.product.sizes
+          };
+
+          setProducts(prev => [newProd, ...prev]);
+          setProductFormSuccess(true);
+          setTimeout(() => {
+            setProductFormSuccess(false);
+            setProdName('');
+            setProdPrice('');
+            setProdStock('');
+            setProdBrand('');
+            setProdSizes('39, 40, 41');
+            setSelectedImage('👟');
+          }, 1500);
+        } else {
+          alert(data.error || 'Erro ao cadastrar produto.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Erro de conexão ao salvar produto.');
+      }
+    }
+  };
+
+  // File Upload converting to Base64
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   // PDV Sale Registry
-  const handlePdvSale = (e: React.FormEvent) => {
+  const handlePdvSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pdvClientPhone || !pdvTotal) return;
 
-    const totalVal = parseFloat(pdvTotal);
+    try {
+      const response = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register_pdv_sale',
+          clientPhone: pdvClientPhone,
+          clientName: pdvClientName,
+          total: pdvTotal,
+          paymentMethod: pdvMethod,
+        }),
+      });
 
-    if (pdvMethod === 'PROMISSORIA') {
-      const newDebtor: Debtor = {
-        id: Math.random().toString(),
-        name: pdvClientName || 'Cliente PDV Presencial',
-        phone: pdvClientPhone,
-        amount: totalVal,
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days due
-        isOverdue: false
-      };
-      setDebtors(prev => [...prev, newDebtor]);
+      const data = await response.json();
+      if (data.success) {
+        // Refresh live data
+        const refreshRes = await fetch('/api/admin');
+        const refreshData = await refreshRes.json();
+        if (refreshData.success) {
+          setSales(refreshData.sales);
+          setDebtors(refreshData.debtors);
+          setClients(refreshData.clients);
+        }
+
+        setPdvSuccessMessage('Venda presencial registrada com sucesso no caixa do Supabase!');
+        setPdvClientPhone('');
+        setPdvClientName('');
+        setPdvTotal('');
+        
+        setTimeout(() => {
+          setPdvSuccessMessage('');
+        }, 3000);
+      } else {
+        alert(data.error || 'Erro ao registrar venda.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro de conexão ao registrar venda.');
     }
-
-    const newSale = {
-      id: (sales.length + 1).toString(),
-      client: pdvClientName || 'Cliente PDV Presencial',
-      phone: pdvClientPhone,
-      total: totalVal,
-      method: pdvMethod,
-      date: new Date().toISOString().split('T')[0]
-    };
-    setSales(prev => [newSale, ...prev]);
-
-    // Check if client is in clients list, if not add
-    if (!clients.some(c => c.phone === pdvClientPhone)) {
-      setClients(prev => [{ name: pdvClientName || 'Cliente PDV Presencial', phone: pdvClientPhone, date: new Date().toISOString().split('T')[0] }, ...prev]);
-    }
-
-    setPdvSuccessMessage('Venda presencial registrada com sucesso no caixa do Supabase!');
-    setPdvClientPhone('');
-    setPdvClientName('');
-    setPdvTotal('');
-    
-    setTimeout(() => {
-      setPdvSuccessMessage('');
-    }, 3000);
   };
 
   // Add Debtor Manual
-  const handleAddDebtor = (e: React.FormEvent) => {
+  const handleAddDebtor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newDebtorName && newDebtorPhone && newDebtorAmount && newDebtorDate) {
-      const debtor: Debtor = {
-        id: Math.random().toString(),
-        name: newDebtorName,
-        phone: newDebtorPhone,
-        amount: parseFloat(newDebtorAmount),
-        dueDate: newDebtorDate,
-        isOverdue: new Date(newDebtorDate) < new Date()
-      };
-      setDebtors(prev => [...prev, debtor]);
-      setNewDebtorName('');
-      setNewDebtorPhone('');
-      setNewDebtorAmount('');
-      setNewDebtorDate('');
+      try {
+        const response = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'add_debtor',
+            name: newDebtorName,
+            phone: newDebtorPhone,
+            amount: newDebtorAmount,
+            dueDate: newDebtorDate,
+          }),
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          const refreshRes = await fetch('/api/admin');
+          const refreshData = await refreshRes.json();
+          if (refreshData.success) {
+            setDebtors(refreshData.debtors);
+            setClients(refreshData.clients);
+          }
+          setNewDebtorName('');
+          setNewDebtorPhone('');
+          setNewDebtorAmount('');
+          setNewDebtorDate('');
+        } else {
+          alert(data.error || 'Erro ao lançar promissória.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Erro de conexão ao lançar promissória.');
+      }
     }
   };
 
   // Discharge debtor
-  const dischargeDebtor = (id: string) => {
-    setDebtors(prev => prev.filter(d => d.id !== id));
+  const dischargeDebtor = async (id: string) => {
+    try {
+      const response = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'discharge_debtor',
+          id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setDebtors(prev => prev.filter(d => d.id !== id));
+      } else {
+        alert(data.error || 'Erro ao baixar promissória.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro de conexão ao baixar promissória.');
+    }
   };
 
   // Cash balance closure
@@ -321,9 +433,8 @@ export default function AdminDashboard() {
         }`}>
           {/* Logo Title */}
           <div className="flex flex-col items-center mb-8">
-            <div className="relative bg-gradient-to-r from-amber-400 to-[#d4af37] w-14 h-14 rounded-xl flex items-center justify-center shadow-lg shadow-[#d4af37]/15">
-              <span className="text-3xl font-serif font-black text-[#09090b]">PR</span>
-              <span className="absolute -top-1.5 -right-1.5 text-xl rotate-[15deg]">👑</span>
+            <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-zinc-850 shadow-lg mb-2">
+              <img src="/logo.jpg" alt="PR Store Logo" className="w-full h-full object-cover" />
             </div>
             <h2 className={`text-xl font-black uppercase tracking-wider mt-4 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>PR Store ERP</h2>
             <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block mt-0.5">Acesso de Funcionários</span>
@@ -378,7 +489,7 @@ export default function AdminDashboard() {
 
             <button 
               type="submit"
-              className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-[#d4af37]/10"
+              className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-[#d4af37]/10 cursor-pointer"
             >
               <Lock className="w-3.5 h-3.5" />
               {codeSent ? 'Confirmar Acesso' : 'Enviar Código OTP'}
@@ -388,7 +499,7 @@ export default function AdminDashboard() {
           {codeSent && (
             <button 
               onClick={() => setCodeSent(false)}
-              className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 hover:text-white mt-4 block mx-auto text-center"
+              className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 hover:text-white mt-4 block mx-auto text-center cursor-pointer"
             >
               Voltar para login
             </button>
@@ -414,9 +525,8 @@ export default function AdminDashboard() {
         isDarkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'
       }`}>
         <div className="flex items-center gap-3">
-          <div className="relative bg-gradient-to-r from-amber-400 to-[#d4af37] w-10 h-10 rounded-lg flex items-center justify-center">
-            <span className="text-xl font-serif font-black text-[#09090b]">PR</span>
-            <span className="absolute -top-1 -right-1 text-sm rotate-[15deg]">👑</span>
+          <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-zinc-850">
+            <img src="/logo.jpg" alt="PR Store Logo" className="w-full h-full object-cover" />
           </div>
           <div>
             <span className="text-sm font-black tracking-widest uppercase block">PR Store ERP</span>
@@ -428,7 +538,7 @@ export default function AdminDashboard() {
           {/* Theme switcher */}
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)} 
-            className={`p-2 rounded-full border transition-colors ${
+            className={`p-2 rounded-full border transition-colors cursor-pointer ${
               isDarkMode ? 'border-zinc-800 text-[#d4af37] hover:bg-zinc-900' : 'border-zinc-200 text-amber-600 hover:bg-zinc-100'
             }`}
           >
@@ -456,7 +566,7 @@ export default function AdminDashboard() {
             <nav className="flex flex-col gap-1">
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'dashboard'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -466,7 +576,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('produtos')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'produtos'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -476,7 +586,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('promissorias')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'promissorias'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -486,7 +596,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('clientes')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'clientes'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -496,7 +606,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('vendas')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'vendas'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -506,7 +616,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('contas')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'contas'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -516,7 +626,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('configuracoes')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all text-left cursor-pointer ${
                   activeTab === 'configuracoes'
                     ? 'bg-zinc-900 border border-zinc-800 text-[#d4af37]'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
@@ -527,8 +637,8 @@ export default function AdminDashboard() {
             </nav>
           </div>
 
-          <div className="pt-6 border-t border-zinc-900/50 text-[10px] text-zinc-650 font-extrabold uppercase tracking-widest">
-            Supabase Connection: <span className="text-green-500">Active</span>
+          <div className="pt-6 border-t border-zinc-900/50 text-[10px] text-zinc-600 font-extrabold uppercase tracking-widest">
+            Supabase Connection: <span className="text-green-500 font-bold">Active</span>
           </div>
         </aside>
 
@@ -549,9 +659,9 @@ export default function AdminDashboard() {
                     <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold block mt-0.5">Visão analítica de faturamento e fluxo de caixa</span>
                   </div>
                   <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-lg border border-zinc-850 text-[9px] font-black uppercase tracking-wider">
-                    <button className="px-2.5 py-1 rounded bg-[#d4af37] text-[#09090b] font-black">Mensal</button>
-                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors">Semanal</button>
-                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors">Diário</button>
+                    <button className="px-2.5 py-1 rounded bg-[#d4af37] text-[#09090b] font-black cursor-pointer">Mensal</button>
+                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Semanal</button>
+                    <button className="px-2.5 py-1 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer">Diário</button>
                   </div>
                 </div>
 
@@ -574,7 +684,7 @@ export default function AdminDashboard() {
                       </ComposedChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="w-full h-full bg-zinc-950/40 animate-pulse rounded-lg flex items-center justify-center text-zinc-650 text-xs">
+                    <div className="w-full h-full bg-zinc-950/40 animate-pulse rounded-lg flex items-center justify-center text-zinc-600 text-xs">
                       Carregando Gráficos Analíticos...
                     </div>
                   )}
@@ -671,14 +781,23 @@ export default function AdminDashboard() {
                     Cadastrar Produto (Ficha de Produto)
                   </h3>
                   <form onSubmit={handleProductSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Simulated Upload Picker triggering modal */}
+                    {/* Real File Upload Picker */}
                     <div 
-                      onClick={() => setIsImagePickerOpen(true)}
+                      onClick={() => document.getElementById('hidden-file-input')?.click()}
                       className="border-2 border-dashed border-zinc-800 hover:border-[#d4af37]/45 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-zinc-950/60 transition-colors cursor-pointer aspect-video sm:aspect-auto"
                     >
                       <Upload className="w-8 h-8 text-[#d4af37] mb-2" />
-                      <span className="text-[10px] font-black text-white uppercase tracking-wider">Selecionar Foto</span>
-                      <span className="text-[12px] font-bold text-[#d4af37] mt-1 block">Preview: {selectedImage}</span>
+                      <span className="text-[10px] font-black text-white uppercase tracking-wider">Selecionar Foto Real</span>
+                      <span className="text-[9px] text-[#d4af37] mt-1 block max-w-full truncate">
+                        {selectedImage.startsWith('data:image') ? 'Foto Carregada (Base64)' : `Preview: ${selectedImage}`}
+                      </span>
+                      <input 
+                        type="file" 
+                        id="hidden-file-input" 
+                        accept="image/*" 
+                        onChange={handleImageUpload} 
+                        className="hidden" 
+                      />
                     </div>
 
                     <div className="space-y-3">
@@ -736,12 +855,21 @@ export default function AdminDashboard() {
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white"
                         />
                       </div>
-                      <button 
-                        type="submit"
-                        className="w-full bg-[#d4af37] text-[#09090b] font-black text-[10px] py-2.5 rounded-lg transition-all uppercase tracking-widest"
-                      >
-                        Salvar na Base
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          type="submit"
+                          className="w-2/3 bg-[#d4af37] text-[#09090b] font-black text-[10px] py-2.5 rounded-lg transition-all uppercase tracking-widest cursor-pointer"
+                        >
+                          Salvar na Base
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setIsImagePickerOpen(true)}
+                          className="w-1/3 bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold text-[9px] rounded-lg transition-all uppercase cursor-pointer"
+                        >
+                          Galeria Mocks
+                        </button>
+                      </div>
                     </div>
                   </form>
                   {productFormSuccess && (
@@ -765,7 +893,7 @@ export default function AdminDashboard() {
                               setSelectedImage(item.id);
                               setIsImagePickerOpen(false);
                             }}
-                            className="bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center gap-2"
+                            className="bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer"
                           >
                             <span className="text-2xl">{item.id}</span>
                             <span className="text-[7.5px] font-bold uppercase text-zinc-500 block">{item.label}</span>
@@ -774,7 +902,7 @@ export default function AdminDashboard() {
                       </div>
                       <button 
                         onClick={() => setIsImagePickerOpen(false)}
-                        className="mt-6 text-zinc-500 hover:text-white text-[10px] font-bold uppercase tracking-wider"
+                        className="mt-6 text-zinc-500 hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                       >
                         Fechar
                       </button>
@@ -821,13 +949,20 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {products.map(p => (
                     <div key={p.id} className="bg-zinc-950 border border-zinc-800 p-4 rounded-xl flex items-center gap-4">
-                      <span className="text-3xl">{p.image}</span>
+                      {/* Safely render base64 or emoji in stock view */}
+                      <div className="w-12 h-12 bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800 overflow-hidden shrink-0">
+                        {p.image.startsWith('data:image') || p.image.startsWith('http') || p.image.startsWith('/') ? (
+                          <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-2xl">{p.image}</span>
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-[8px] text-[#d4af37] font-black uppercase tracking-widest block">{p.brand}</span>
                         <h4 className="text-xs font-bold text-[#f4f4f5] truncate">{p.name}</h4>
                         <span className="text-[10px] font-black text-[#d4af37] block mt-0.5">R$ {p.price.toFixed(2)}</span>
                       </div>
-                      <div className="bg-zinc-900 border border-zinc-850 px-2 py-1.5 rounded-lg text-center">
+                      <div className="bg-zinc-900 border border-zinc-850 px-2 py-1.5 rounded-lg text-center shrink-0">
                         <span className="text-[8px] text-zinc-500 uppercase block font-bold">Estoque</span>
                         <span className="text-xs font-black text-white">{p.stock}</span>
                       </div>
@@ -849,13 +984,13 @@ export default function AdminDashboard() {
                   isDarkMode ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
                 }`}>
                   <h3 className="text-xs font-black uppercase tracking-wider text-red-500 mb-4 pb-2 border-b border-zinc-900/60 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 animate-pulse" /> Controle de Inadimplência ("No Fio")
+                    <AlertTriangle className="w-4 h-4 animate-pulse" /> Controle de Inadimplência (&quot;No Fio&quot;)
                   </h3>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-[10px] font-semibold text-zinc-400">
                       <thead>
-                        <tr className="border-b border-zinc-900 text-zinc-650 uppercase tracking-widest text-[8px] font-black">
+                        <tr className="border-b border-zinc-900 text-zinc-600 uppercase tracking-widest text-[8px] font-black">
                           <th className="pb-3">Cliente</th>
                           <th className="pb-3">Débito Total</th>
                           <th className="pb-3">Data Limite</th>
@@ -881,7 +1016,7 @@ export default function AdminDashboard() {
                             <td className="py-4 text-right flex justify-end gap-2">
                               <button 
                                 onClick={() => dischargeDebtor(debtor.id)}
-                                className="bg-[#d4af37] text-[#09090b] px-3 py-1.5 rounded text-[8px] font-black uppercase tracking-wider hover:bg-amber-400 transition-colors"
+                                className="bg-[#d4af37] text-[#09090b] px-3 py-1.5 rounded text-[8px] font-black uppercase tracking-wider hover:bg-amber-400 transition-colors cursor-pointer"
                               >
                                 Baixar
                               </button>
@@ -952,7 +1087,7 @@ export default function AdminDashboard() {
                     </div>
                     <button 
                       type="submit"
-                      className="w-full bg-zinc-850 hover:bg-[#d4af37] hover:text-[#09090b] text-zinc-300 font-black text-[9px] py-2.5 rounded-lg border border-zinc-800 uppercase tracking-widest transition-colors"
+                      className="w-full bg-zinc-850 hover:bg-[#d4af37] hover:text-[#09090b] text-zinc-300 font-black text-[9px] py-2.5 rounded-lg border border-zinc-800 uppercase tracking-widest transition-colors cursor-pointer"
                     >
                       Registrar Promissória
                     </button>
@@ -1068,7 +1203,7 @@ export default function AdminDashboard() {
 
                       <button 
                         type="submit"
-                        className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
+                        className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors cursor-pointer"
                       >
                         Concluir Venda Presencial
                       </button>
@@ -1099,7 +1234,7 @@ export default function AdminDashboard() {
                           </div>
                           <div className="text-right">
                             <span className="text-[9px] font-black text-[#d4af37] block">R$ {sale.total.toFixed(2)}</span>
-                            <span className="text-[7px] text-zinc-600 block">{sale.method} - {sale.date}</span>
+                            <span className="text-[7px] text-zinc-650 block">{sale.method} - {sale.date}</span>
                           </div>
                         </div>
                       ))}
@@ -1137,7 +1272,7 @@ export default function AdminDashboard() {
                     </div>
                     <button 
                       type="submit"
-                      className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
+                      className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors cursor-pointer"
                     >
                       Bater Caixa
                     </button>
@@ -1175,7 +1310,7 @@ export default function AdminDashboard() {
                     />
                     <button 
                       type="submit"
-                      className="sm:col-span-3 bg-zinc-850 hover:bg-[#d4af37] hover:text-[#09090b] text-zinc-300 font-black text-[10px] py-2 rounded-lg border border-zinc-800 uppercase tracking-widest transition-colors"
+                      className="sm:col-span-3 bg-zinc-850 hover:bg-[#d4af37] hover:text-[#09090b] text-zinc-350 font-black text-[10px] py-2 rounded-lg border border-zinc-800 uppercase tracking-widest transition-colors cursor-pointer"
                     >
                       Registrar Custo
                     </button>
@@ -1184,7 +1319,7 @@ export default function AdminDashboard() {
                   {/* Expenses list */}
                   <div className="mt-4 space-y-2 max-h-36 overflow-y-auto pr-1">
                     {expenses.map((exp, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-[10px] font-semibold text-zinc-500 bg-zinc-950/40 p-2b rounded border border-zinc-900/60 p-2">
+                      <div key={idx} className="flex justify-between items-center text-[10px] font-semibold text-zinc-500 bg-zinc-950/40 rounded border border-zinc-900/60 p-2">
                         <span>{exp.description}</span>
                         <span className="text-red-500 font-bold">- R$ {exp.val.toFixed(2)}</span>
                       </div>
@@ -1221,19 +1356,19 @@ export default function AdminDashboard() {
                         <td className="py-3 font-bold text-white">Wagner Lima (Dono)</td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" defaultChecked className="sr-only peer" />
+                            <input type="checkbox" defaultChecked className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" defaultChecked className="sr-only peer" />
+                            <input type="checkbox" defaultChecked className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" defaultChecked className="sr-only peer" />
+                            <input type="checkbox" defaultChecked className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>
@@ -1242,19 +1377,19 @@ export default function AdminDashboard() {
                         <td className="py-3 font-bold text-white">Larissa Souza (Funcionário)</td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" />
+                            <input type="checkbox" className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" />
+                            <input type="checkbox" className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>
                         <td>
                           <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" defaultChecked className="sr-only peer" />
+                            <input type="checkbox" defaultChecked className="sr-only peer animate-none" />
                             <div className="w-7 h-4 bg-zinc-850 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 peer-checked:after:bg-[#d4af37] after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#d4af37]/25" />
                           </label>
                         </td>

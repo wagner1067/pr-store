@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Filter, Clock, Sparkles, Phone, ShoppingCart, 
   Trash2, X, Send, HelpCircle, ArrowRight, CheckCircle2,
-  Sun, Moon, Search, ShoppingBag
+  Sun, Moon, Search, ShoppingBag, CreditCard, QrCode, Clipboard
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -103,7 +103,7 @@ const TRANSLATIONS = {
     shippingLabel: "Cálculo de Envio (CEP):",
     subtotal: "Subtotal:",
     checkoutBtn: "Finalizar Compra Segura",
-    checkoutRedirecting: "Redirecionando...",
+    checkoutRedirecting: "Processando...",
     leadTitle: "Membro PR Store",
     leadDesc: "Digite seu WhatsApp abaixo para receber novidades exclusivas e destravar um cupom de 10% de boas-vindas.",
     leadBtn: "Resgatar Cupom de Luxo",
@@ -127,7 +127,7 @@ const TRANSLATIONS = {
     shippingLabel: "Shipping Estimate (ZIP):",
     subtotal: "Subtotal:",
     checkoutBtn: "Secure Checkout",
-    checkoutRedirecting: "Redirecting...",
+    checkoutRedirecting: "Processing...",
     leadTitle: "PR Store Member",
     leadDesc: "Enter your WhatsApp below to receive exclusive news and unlock a 10% welcome coupon.",
     leadBtn: "Claim Luxury Coupon",
@@ -145,13 +145,13 @@ const TRANSLATIONS = {
     categoriesSub: "Buscar ropa y accesorios",
     showcaseTitle: "Escaparate Streetwear",
     showcaseSub: "artículos encontrados",
-    filters: "Filtros",
+    filters: "Filters",
     cartTitle: "Bolsa de Compras",
     cartEmpty: "La bolsa está vacía. Añade artículos de la tienda.",
     shippingLabel: "Cálculo de Envío (Código Postal):",
     subtotal: "Total parcial:",
     checkoutBtn: "Finalizar Compra Segura",
-    checkoutRedirecting: "Redireccionando...",
+    checkoutRedirecting: "Procesando...",
     leadTitle: "Miembro de PR Store",
     leadDesc: "Ingrese su WhatsApp a continuación para recibir noticias exclusivas y desbloquear un cupón de bienvenida de 10%.",
     leadBtn: "Canjear Cupón de Lujo",
@@ -163,6 +163,7 @@ const TRANSLATIONS = {
 };
 
 export default function Home() {
+  const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedBrand, setSelectedBrand] = useState<string>('All');
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -170,7 +171,23 @@ export default function Home() {
 
   const t = TRANSLATIONS[language];
 
-  const products = MOCK_PRODUCTS.filter(p => {
+  // Fetch live products from API
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        if (data.success && data.products && data.products.length > 0) {
+          setProductsList(data.products);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch products from Supabase API, falling back to mock data:', err);
+      }
+    }
+    loadProducts();
+  }, []);
+
+  const products = productsList.filter(p => {
     if (selectedCategory !== 'All' && p.category !== selectedCategory) return false;
     if (selectedBrand !== 'All' && p.brand !== selectedBrand) return false;
     return true;
@@ -185,6 +202,17 @@ export default function Home() {
   const [leadSubmitted, setLeadSubmitted] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   
+  // Checkout drawer multi-step state
+  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'details' | 'pix_screen'>('cart');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CARD'>('PIX');
+  const [pixDetails, setPixDetails] = useState<{ qrCode: string; barcode: string; total: number; orderId: string } | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  // Success Modal State
+  const [checkoutSuccessInfo, setCheckoutSuccessInfo] = useState<{ isOpen: boolean; orderId?: string } | null>(null);
+
   // Chat Widget States
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{sender: 'user' | 'ai', text: string}[]>([
@@ -203,11 +231,29 @@ export default function Home() {
   // Load lead modal after 5 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!localStorage.getItem('pr_lead_submitted')) {
+      const savedLead = localStorage.getItem('pr_lead_submitted');
+      if (!savedLead) {
         setIsLeadOpen(true);
+      } else {
+        setCustomerPhone(savedLead);
       }
     }, 5000);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Check query params for successful card redirection success
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout_success') === 'true') {
+      const orderId = params.get('order_id') || undefined;
+      setCheckoutSuccessInfo({
+        isOpen: true,
+        orderId,
+      });
+      setCart([]); // Clear cart
+      // Remove query parameters from URL safely
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   // Countdown timer clock tick
@@ -228,7 +274,8 @@ export default function Home() {
   const handleLeadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (leadPhone.length >= 10) {
-      localStorage.setItem('pr_lead_submitted', 'true');
+      localStorage.setItem('pr_lead_submitted', leadPhone);
+      setCustomerPhone(leadPhone);
       setLeadSubmitted(true);
       setTimeout(() => {
         setIsLeadOpen(false);
@@ -289,12 +336,15 @@ export default function Home() {
     }
   };
 
-  // Stripe Checkout
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
+  // Checkout API trigger
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cart.length === 0 || !customerPhone) return;
     setIsCheckingOut(true);
+
     try {
       const checkoutItems = cart.map(item => ({
+        id: item.product.id,
         name: item.product.name,
         price: item.product.promoPrice || item.product.price,
         quantity: item.quantity,
@@ -305,21 +355,52 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: checkoutItems,
-          paymentMethod: 'CARD',
+          paymentMethod,
+          clientPhone: customerPhone,
+          clientName: customerName,
+          shippingCost: shippingCost || 0,
+          shippingMethod: shippingMethod || 'Retirada em Mãos',
         }),
       });
 
       const data = await response.json();
-      if (data.success && data.url) {
-        window.location.href = data.url;
+      if (data.success) {
+        if (paymentMethod === 'CARD') {
+          if (data.url) {
+            window.location.href = data.url;
+          } else {
+            // Simulated direct success
+            setCheckoutSuccessInfo({ isOpen: true, orderId: data.pedidoId });
+            setCart([]);
+            setIsCartOpen(false);
+            setCheckoutStep('cart');
+          }
+        } else {
+          // PIX flow: show details screen
+          setPixDetails({
+            qrCode: data.qrCode,
+            barcode: data.barcode,
+            total: data.total,
+            orderId: data.pedidoId
+          });
+          setCheckoutStep('pix_screen');
+        }
       } else {
-        alert('Erro ao iniciar o checkout. Tente novamente.');
+        alert(data.error || 'Erro ao processar o checkout.');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao iniciar o checkout.');
+      alert('Erro de conexão ao iniciar o checkout.');
     } finally {
       setIsCheckingOut(false);
+    }
+  };
+
+  const copyPixKey = () => {
+    if (pixDetails) {
+      navigator.clipboard.writeText(pixDetails.barcode);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
     }
   };
 
@@ -343,8 +424,27 @@ export default function Home() {
     }, 1000);
   };
 
-  // Render vector placeholders for luxury streetwear catalog items
+  // Render product images safely
   const renderProductImage = (imageId: string) => {
+    if (!imageId) {
+      return (
+        <svg className="w-36 h-36 text-zinc-500 transition-transform duration-500 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 17v-4h6v4M12 9v4" />
+        </svg>
+      );
+    }
+
+    if (imageId.startsWith('data:image') || imageId.startsWith('http') || imageId.startsWith('/') || imageId.startsWith('blob:')) {
+      return (
+        <img 
+          src={imageId} 
+          alt="Produto" 
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+        />
+      );
+    }
+
     switch (imageId) {
       case '#jordan':
         return (
@@ -393,12 +493,9 @@ export default function Home() {
         isDarkMode ? 'bg-[#09090b]/90 border-zinc-800/80' : 'bg-white/95 border-zinc-200'
       } px-6 py-4 flex items-center justify-between`}>
         <Link href="/" className="flex items-center gap-3 group">
-          {/* Official Logo: Rounded gold badge with "PR", crown tilted, and subtitles */}
-          <div className="flex flex-col items-center">
-            <div className="relative bg-gradient-to-r from-amber-400 to-[#d4af37] w-12 h-12 rounded-xl flex items-center justify-center shadow-lg shadow-[#d4af37]/15">
-              <span className="text-2xl font-serif font-black text-[#09090b]">PR</span>
-              <span className="absolute -top-1.5 -right-1.5 text-lg rotate-[15deg]">👑</span>
-            </div>
+          {/* Official Logo */}
+          <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-zinc-800 shadow-md">
+            <img src="/logo.jpg" alt="PR Store Logo" className="w-full h-full object-cover" />
           </div>
           <div>
             <span className={`text-lg font-black tracking-widest uppercase block transition-colors ${
@@ -451,7 +548,10 @@ export default function Home() {
 
           {/* Shopping Bag Button (Working Cart trigger) */}
           <button 
-            onClick={() => setIsCartOpen(true)}
+            onClick={() => {
+              setCheckoutStep('cart');
+              setIsCartOpen(true);
+            }}
             className={`p-2.5 rounded-full border transition-all relative ${
               isDarkMode ? 'border-zinc-800 text-[#d4af37] hover:bg-zinc-900' : 'border-zinc-200 text-amber-600 hover:bg-zinc-100'
             }`}
@@ -479,7 +579,7 @@ export default function Home() {
 
       {/* 1. Lightning Deal / Promoção Relâmpago Section */}
       <section className={`relative overflow-hidden border-b transition-colors py-16 px-6 lg:px-12 ${
-        isDarkMode ? 'bg-gradient-to-b from-[#121214] via-[#09090b] to-[#09090b] border-zinc-900' : 'bg-gradient-to-b from-zinc-50 via-white to-white border-zinc-200'
+        isDarkMode ? 'bg-linear-to-b from-[#121214] via-[#09090b] to-[#09090b] border-zinc-900' : 'bg-linear-to-b from-zinc-50 via-white to-white border-zinc-200'
       }`}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           
@@ -492,7 +592,7 @@ export default function Home() {
               isDarkMode ? 'text-white' : 'text-zinc-950'
             }`}>
               {t.heroTitle} <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-500 to-[#d4af37]">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-amber-400 via-yellow-500 to-[#d4af37]">
                 {t.heroSubtitle}
               </span>
             </h1>
@@ -555,11 +655,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Large Prototype Sneaker Graphic representation */}
+          {/* Large Sneaker Graphic */}
           <div className="lg:col-span-5 flex justify-center items-center relative">
             <div className="absolute w-72 h-72 rounded-full bg-[#d4af37]/5 blur-3xl -z-10" />
             <div className={`border p-8 rounded-2xl shadow-2xl relative w-full max-w-sm aspect-square flex items-center justify-center group overflow-hidden ${
-              isDarkMode ? 'bg-gradient-to-tr from-zinc-900 to-zinc-950/60 border-zinc-800' : 'bg-gradient-to-tr from-zinc-100 to-zinc-50 border-zinc-200'
+              isDarkMode ? 'bg-linear-to-tr from-zinc-900 to-zinc-950/60 border-zinc-800' : 'bg-linear-to-tr from-zinc-100 to-zinc-50 border-zinc-200'
             }`}>
               <div className="absolute top-4 right-4 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-md text-[10px] font-black text-[#d4af37] tracking-wider uppercase">
                 Edição de Luxo
@@ -590,7 +690,7 @@ export default function Home() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all ${
+              className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
                 selectedCategory === cat.id 
                   ? 'bg-zinc-900 border-[#d4af37] text-[#d4af37]' 
                   : isDarkMode 
@@ -616,7 +716,7 @@ export default function Home() {
           </div>
           <button 
             onClick={() => setIsFilterOpen(true)}
-            className={`flex items-center gap-2 border hover:border-[#d4af37]/40 hover:text-[#d4af37] rounded-lg px-4 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${
+            className={`flex items-center gap-2 border hover:border-[#d4af37]/40 hover:text-[#d4af37] rounded-lg px-4 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
               isDarkMode ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'
             }`}
           >
@@ -687,8 +787,8 @@ export default function Home() {
                         <button
                           key={size}
                           onClick={() => addToCart(product, size)}
-                          className={`px-3 py-1.5 rounded-lg border hover:border-[#d4af37] hover:text-[#d4af37] text-[10px] font-bold transition-all ${
-                            isDarkMode ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-white'
+                          className={`px-3 py-1.5 rounded-lg border hover:border-[#d4af37] hover:text-[#d4af37] text-[10px] font-bold transition-all cursor-pointer ${
+                            isDarkMode ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-zinc-200 bg-white text-zinc-700'
                           }`}
                         >
                           {size}
@@ -738,7 +838,7 @@ export default function Home() {
                   </div>
                   <button 
                     type="submit"
-                    className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
+                    className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors cursor-pointer"
                   >
                     {t.leadBtn}
                   </button>
@@ -764,7 +864,7 @@ export default function Home() {
             <div>
               <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
                 <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5]">Filtros do Catálogo</h3>
-                <button onClick={() => setIsFilterOpen(false)} className="text-zinc-500 hover:text-white">
+                <button onClick={() => setIsFilterOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -777,7 +877,7 @@ export default function Home() {
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
-                      className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all ${
+                      className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all cursor-pointer ${
                         selectedCategory === cat 
                           ? 'bg-[#d4af37]/10 border-[#d4af37]/50 text-[#d4af37]' 
                           : 'border-zinc-800/80 hover:border-zinc-700 bg-zinc-950 text-zinc-400'
@@ -797,7 +897,7 @@ export default function Home() {
                     <button
                       key={brand}
                       onClick={() => setSelectedBrand(brand)}
-                      className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all ${
+                      className={`text-left text-xs font-semibold py-2 px-3 rounded-lg border transition-all cursor-pointer ${
                         selectedBrand === brand 
                           ? 'bg-[#d4af37]/10 border-[#d4af37]/50 text-[#d4af37]' 
                           : 'border-zinc-800/80 hover:border-zinc-700 bg-zinc-950 text-zinc-400'
@@ -812,7 +912,7 @@ export default function Home() {
 
             <button 
               onClick={() => setIsFilterOpen(false)}
-              className="w-full bg-[#d4af37] text-[#09090b] text-xs font-black py-3.5 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors"
+              className="w-full bg-[#d4af37] text-[#09090b] text-xs font-black py-3.5 rounded-lg hover:bg-amber-400 tracking-wider uppercase transition-colors cursor-pointer"
             >
               Aplicar Filtros
             </button>
@@ -820,113 +920,314 @@ export default function Home() {
         </div>
       )}
 
-      {/* 6. Shopping Cart Drawer Sheet */}
+      {/* 6. Shopping Cart Drawer Sheet & Interactive Checkout */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-[#09090b]/80 backdrop-blur-sm flex justify-end">
           <div className="bg-[#121214] border-l border-zinc-800 w-full max-w-md h-full p-8 flex flex-col justify-between shadow-2xl">
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
-                <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5] flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-[#d4af37]" /> {t.cartTitle}
-                </h3>
-                <button onClick={() => setIsCartOpen(false)} className="text-zinc-500 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Items List */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                {cart.length === 0 ? (
-                  <div className="text-center py-12 text-zinc-500 text-xs">
-                    <span className="text-4xl block mb-2">🛍️</span>
-                    {t.cartEmpty}
-                  </div>
-                ) : (
-                  cart.map((item, idx) => (
-                    <div key={idx} className="flex gap-4 p-3 bg-zinc-900/60 border border-zinc-800/60 rounded-xl relative">
-                      <div className="w-16 h-16 bg-zinc-950 rounded-lg flex items-center justify-center text-2xl border border-zinc-800">
-                        {item.product.images[0] === '#jordan' ? '👟' : item.product.images[0] === '#hoodie' ? '👕' : '💎'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold text-[#f4f4f5] truncate">{item.product.name}</h4>
-                        <span className="text-[10px] text-[#d4af37] font-black uppercase block mt-1">
-                          Tamanho: {item.selectedSize}
-                        </span>
-                        <div className="flex justify-between items-center mt-2.5">
-                          {/* Quantity selector increment/decrement */}
-                          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-0.5">
-                            <button onClick={() => updateQuantity(item.product.id, item.selectedSize, -1)} className="text-zinc-400 hover:text-white text-xs font-bold px-1">-</button>
-                            <span className="text-xs font-black text-[#d4af37]">{item.quantity}</span>
-                            <button onClick={() => updateQuantity(item.product.id, item.selectedSize, 1)} className="text-zinc-400 hover:text-white text-xs font-bold px-1">+</button>
-                          </div>
-                          <span className="text-xs font-black text-[#d4af37]">
-                            R$ {((item.product.promoPrice || item.product.price) * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => removeFromCart(item.product.id, item.selectedSize)}
-                        className="text-zinc-650 hover:text-red-500 p-1 absolute top-2 right-2 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Shipping & Checkout area */}
-            <div className="border-t border-zinc-800/80 pt-6 mt-6">
-              {/* Shipping Calculator */}
-              <div className="mb-4">
-                <span className="text-[10px] text-zinc-500 uppercase block mb-1.5 font-black tracking-widest">
-                  {t.shippingLabel}
-                </span>
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    value={cepInput}
-                    onChange={(e) => setCepInput(e.target.value)}
-                    placeholder="Ex: 85851000"
-                    maxLength={8}
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-xs focus:border-[#d4af37] focus:outline-none text-white font-medium"
-                  />
-                  <button 
-                    onClick={calculateShipping}
-                    className="bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] hover:text-[#d4af37] text-xs px-3 rounded-lg transition-colors font-bold uppercase tracking-wider"
-                  >
-                    {t.calcBtn}
+            
+            {checkoutStep === 'cart' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
+                  <h3 className="text-lg font-black uppercase tracking-wider text-[#f4f4f5] flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-[#d4af37]" /> {t.cartTitle}
+                  </h3>
+                  <button onClick={() => setIsCartOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-                {shippingCost !== null && (
-                  <div className="mt-2 text-[11px] text-zinc-400 flex justify-between items-center bg-zinc-900/40 p-2.5 rounded border border-zinc-800/40">
-                    <span>{shippingMethod}</span>
-                    <span className="font-black text-[#d4af37]">R$ {shippingCost.toFixed(2)}</span>
+
+                {/* Items List */}
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-12 text-zinc-500 text-xs">
+                      <span className="text-4xl block mb-2">🛍️</span>
+                      {t.cartEmpty}
+                    </div>
+                  ) : (
+                    cart.map((item, idx) => (
+                      <div key={idx} className="flex gap-4 p-3 bg-zinc-900/60 border border-zinc-800/60 rounded-xl relative">
+                        <div className="w-16 h-16 bg-zinc-950 rounded-lg flex items-center justify-center text-2xl border border-zinc-800">
+                          {item.product.images[0] === '#jordan' ? '👟' : item.product.images[0] === '#hoodie' ? '👕' : item.product.images[0] === '#necklace' ? '💎' : '👟'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-[#f4f4f5] truncate">{item.product.name}</h4>
+                          <span className="text-[10px] text-[#d4af37] font-black uppercase block mt-1">
+                            Tamanho: {item.selectedSize}
+                          </span>
+                          <div className="flex justify-between items-center mt-2.5">
+                            {/* Quantity selector */}
+                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-0.5">
+                              <button onClick={() => updateQuantity(item.product.id, item.selectedSize, -1)} className="text-zinc-400 hover:text-white text-xs font-bold px-1 cursor-pointer">-</button>
+                              <span className="text-xs font-black text-[#d4af37]">{item.quantity}</span>
+                              <button onClick={() => updateQuantity(item.product.id, item.selectedSize, 1)} className="text-zinc-400 hover:text-white text-xs font-bold px-1 cursor-pointer">+</button>
+                            </div>
+                            <span className="text-xs font-black text-[#d4af37]">
+                              R$ {((item.product.promoPrice || item.product.price) * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeFromCart(item.product.id, item.selectedSize)}
+                          className="text-zinc-650 hover:text-red-500 p-1 absolute top-2 right-2 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Shipping & Checkout Subtotals */}
+                <div className="border-t border-zinc-800/80 pt-6 mt-6">
+                  <div className="mb-4">
+                    <span className="text-[10px] text-zinc-500 uppercase block mb-1.5 font-black tracking-widest">
+                      {t.shippingLabel}
+                    </span>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={cepInput}
+                        onChange={(e) => setCepInput(e.target.value)}
+                        placeholder="Ex: 85851000"
+                        maxLength={8}
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-xs focus:border-[#d4af37] focus:outline-none text-white font-medium"
+                      />
+                      <button 
+                        onClick={calculateShipping}
+                        className="bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] hover:text-[#d4af37] text-xs px-4 rounded-lg transition-colors font-bold uppercase tracking-wider cursor-pointer"
+                      >
+                        {t.calcBtn}
+                      </button>
+                    </div>
+                    {shippingCost !== null && (
+                      <div className="mt-2 text-[11px] text-zinc-400 flex justify-between items-center bg-zinc-900/40 p-2.5 rounded border border-zinc-800/40">
+                        <span>{shippingMethod}</span>
+                        <span className="font-black text-[#d4af37]">R$ {shippingCost.toFixed(2)}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Subtotal */}
-              <div className="flex justify-between items-baseline mb-6">
-                <span className="text-xs text-zinc-400 font-black uppercase tracking-wider">{t.subtotal}</span>
-                <span className="text-2xl font-black text-[#d4af37]">R$ {getSubtotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-              </div>
+                  <div className="flex justify-between items-baseline mb-6">
+                    <span className="text-xs text-zinc-400 font-black uppercase tracking-wider">{t.subtotal}</span>
+                    <span className="text-2xl font-black text-[#d4af37]">R$ {getSubtotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
 
-              {/* Actions */}
-              <button 
-                onClick={handleCheckout}
-                disabled={cart.length === 0 || isCheckingOut}
-                className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-[#d4af37]/10 tracking-widest uppercase"
-              >
-                {isCheckingOut ? t.checkoutRedirecting : t.checkoutBtn} <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+                  <button 
+                    onClick={() => {
+                      if (cart.length > 0) setCheckoutStep('details');
+                    }}
+                    disabled={cart.length === 0}
+                    className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-[#d4af37]/10 tracking-widest uppercase cursor-pointer"
+                  >
+                    Próximo Passo <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {checkoutStep === 'details' && (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                <div>
+                  <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
+                    <button 
+                      onClick={() => setCheckoutStep('cart')}
+                      className="text-zinc-500 hover:text-white text-xs font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                    >
+                      ← Voltar
+                    </button>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-[#f4f4f5]">Detalhes do Pagamento</h3>
+                    <button onClick={() => setIsCartOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCheckoutSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">Nome Completo:</label>
+                      <input 
+                        type="text" 
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Ex: João Silva"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white font-medium"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[9px] text-zinc-500 uppercase block mb-1 font-bold tracking-widest">WhatsApp (Celular):</label>
+                      <input 
+                        type="tel" 
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="Ex: 45999999999"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-white font-medium"
+                        required
+                      />
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="text-[9px] text-zinc-500 uppercase block mb-2 font-bold tracking-widest">Forma de Pagamento:</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('PIX')}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 cursor-pointer transition-colors ${
+                            paymentMethod === 'PIX'
+                              ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]'
+                              : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          <QrCode className="w-5 h-5" />
+                          <span className="text-[10px] font-black uppercase">PIX</span>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('CARD')}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 cursor-pointer transition-colors ${
+                            paymentMethod === 'CARD'
+                              ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]'
+                              : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          <CreditCard className="w-5 h-5" />
+                          <span className="text-[10px] font-black uppercase">Cartão</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {shippingCost !== null && (
+                      <div className="text-[10px] text-zinc-500 bg-zinc-950/40 p-3 rounded-lg border border-zinc-900 mt-4">
+                        <div className="flex justify-between mb-1">
+                          <span>Envio ({shippingMethod}):</span>
+                          <span>R$ {shippingCost.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-white font-bold">
+                          <span>Total Geral:</span>
+                          <span className="text-[#d4af37]">R$ {(getSubtotal() + shippingCost).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <button 
+                      type="submit"
+                      disabled={isCheckingOut}
+                      className="w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3.5 rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-[#d4af37]/10 tracking-widest uppercase mt-6 cursor-pointer"
+                    >
+                      {isCheckingOut ? t.checkoutRedirecting : t.checkoutBtn}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {checkoutStep === 'pix_screen' && pixDetails && (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden text-center">
+                <div>
+                  <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
+                    <span className="text-xs font-black uppercase tracking-wider text-[#d4af37]">Pagamento Pix</span>
+                    <button 
+                      onClick={() => {
+                        setCart([]);
+                        setIsCartOpen(false);
+                        setCheckoutStep('cart');
+                      }} 
+                      className="text-zinc-500 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl max-w-[200px] mx-auto border border-zinc-200 shadow-lg mb-6">
+                    {/* Simulated Pix QR Code badge */}
+                    <div className="w-40 h-40 bg-zinc-100 flex items-center justify-center border border-zinc-200 rounded-lg mx-auto">
+                      <QrCode className="w-24 h-24 text-zinc-800" />
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-400 max-w-xs mx-auto leading-relaxed mb-6">
+                    Copie a chave Pix abaixo e pague no aplicativo do seu banco. Após pagar, envie o comprovante para nosso WhatsApp para liberação.
+                  </p>
+
+                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-850 rounded-lg p-2.5 max-w-sm mx-auto mb-4">
+                    <input 
+                      type="text" 
+                      readOnly 
+                      value={pixDetails.barcode}
+                      className="flex-1 bg-transparent text-[9px] text-zinc-400 border-none outline-none font-mono"
+                    />
+                    <button 
+                      onClick={copyPixKey}
+                      className="bg-zinc-900 border border-zinc-800 hover:border-[#d4af37] text-zinc-400 hover:text-[#d4af37] p-2 rounded-lg transition-colors cursor-pointer"
+                      title="Copiar Código"
+                    >
+                      {copiedKey ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Clipboard className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  <span className="text-lg font-black text-[#d4af37] block mb-2">Total: R$ {pixDetails.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+
+                <div className="space-y-3">
+                  <a 
+                    href={`https://wa.me/5545999999999?text=${encodeURIComponent(`Olá, realizei o pagamento Pix do pedido #${pixDetails.orderId} no valor de R$ ${pixDetails.total.toFixed(2)}. Segue o comprovante em anexo.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-green-600 text-white font-black text-xs py-3 rounded-lg hover:bg-green-500 transition-colors flex items-center justify-center gap-2 uppercase tracking-wider block text-center"
+                  >
+                    💬 Enviar Comprovante WhatsApp
+                  </a>
+
+                  <button 
+                    onClick={() => {
+                      setCart([]);
+                      setIsCartOpen(false);
+                      setCheckoutStep('cart');
+                    }}
+                    className="w-full bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] hover:text-[#d4af37] font-black text-[10px] py-3 rounded-lg uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Concluir e Voltar ao Início
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}
 
-      {/* 7. Floating support Chat & WhatsApp Widget */}
+      {/* 7. Success Modal */}
+      {checkoutSuccessInfo && checkoutSuccessInfo.isOpen && (
+        <div className="fixed inset-0 z-50 bg-[#09090b]/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn">
+          <div className="bg-[#121214] border border-zinc-800 rounded-xl p-8 max-w-sm w-full text-center relative shadow-2xl">
+            <div className="w-16 h-16 bg-[#d4af37]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#d4af37]/30">
+              <CheckCircle2 className="w-10 h-10 text-[#d4af37]" />
+            </div>
+            
+            <h3 className="text-lg font-black text-white uppercase tracking-wider">Compra Finalizada!</h3>
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+              Obrigado por comprar na PR Store. Seu pagamento com cartão de crédito foi processado e salvo no nosso sistema.
+            </p>
+
+            {checkoutSuccessInfo.orderId && (
+              <div className="bg-zinc-950 border border-zinc-850 p-2.5 rounded-lg text-center mt-4">
+                <span className="text-[8px] text-zinc-500 uppercase block font-bold">ID do Pedido</span>
+                <span className="text-xs font-mono font-black text-[#d4af37]">{checkoutSuccessInfo.orderId}</span>
+              </div>
+            )}
+
+            <button
+              onClick={() => setCheckoutSuccessInfo(null)}
+              className="mt-6 w-full bg-[#d4af37] text-[#09090b] font-black text-xs py-3 rounded-lg hover:bg-amber-400 uppercase tracking-widest transition-colors cursor-pointer"
+            >
+              Continuar Comprando
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Floating support Chat & WhatsApp Widget */}
       <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
         {/* Chat window */}
         {isChatOpen && (
@@ -940,7 +1241,7 @@ export default function Home() {
                   <span className="text-[9px] text-green-500 font-semibold block -mt-0.5">Online Serverless</span>
                 </div>
               </div>
-              <button onClick={() => setIsChatOpen(false)} className="text-zinc-500 hover:text-white">
+              <button onClick={() => setIsChatOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -976,7 +1277,7 @@ export default function Home() {
               />
               <button 
                 type="submit"
-                className="bg-[#d4af37] hover:bg-amber-400 text-[#09090b] p-1.5 rounded-lg transition-colors"
+                className="bg-[#d4af37] hover:bg-amber-400 text-[#09090b] p-1.5 rounded-lg transition-colors cursor-pointer"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -997,7 +1298,7 @@ export default function Home() {
           </a>
           <button 
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className="w-12 h-12 rounded-full bg-[#d4af37] flex items-center justify-center shadow-lg hover:bg-amber-400 transition-colors border border-amber-600/30 text-[#09090b]"
+            className="w-12 h-12 rounded-full bg-[#d4af37] flex items-center justify-center shadow-lg hover:bg-amber-400 transition-colors border border-amber-600/30 text-[#09090b] cursor-pointer"
           >
             <HelpCircle className="w-6 h-6" />
           </button>
