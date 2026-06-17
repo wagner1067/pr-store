@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  User, Shield, TrendingUp, AlertTriangle, 
-  Package, Check, MessageSquare, Plus, Upload, 
-  DollarSign, FileText, CheckCircle2, ChevronRight,
-  Sun, Moon, Users, Settings, ShoppingCart, CreditCard,
+  TrendingUp, AlertTriangle, 
+  Package, Check, Upload, 
+  CheckCircle2, Sun, Moon, 
+  Users, Settings, ShoppingCart, CreditCard,
   Lock, ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
         .then(res => res.json())
         .then(data => {
           if (data.success && data.products) {
-            setProducts(data.products.map((p: any) => ({
+            setProducts(data.products.map((p: { id: string; name: string; brand: string; stock: number; price: number; category: string; images: string[]; sizes: string[] }) => ({
               id: p.id,
               name: p.name,
               brand: p.brand,
@@ -281,13 +281,42 @@ export default function AdminDashboard() {
     }
   };
 
-  // File Upload converting to Base64
+  // File Upload converting to Base64 with client-side canvas compression
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+      reader.onload = (event) => {
+        const img = document.createElement('img');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 600;
+          const MAX_HEIGHT = 600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); // 60% quality JPEG
+            setSelectedImage(compressedBase64);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -1190,7 +1219,7 @@ export default function AdminDashboard() {
                           <label className="text-[9px] text-zinc-500 uppercase block mb-1.5 font-bold tracking-widest">Método de Cobrança:</label>
                           <select
                             value={pdvMethod}
-                            onChange={(e) => setPdvMethod(e.target.value as any)}
+                            onChange={(e) => setPdvMethod(e.target.value as 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'PROMISSORIA')}
                             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:border-[#d4af37] focus:outline-none text-zinc-400 font-semibold"
                           >
                             <option value="PIX">Pix Dinâmico</option>
