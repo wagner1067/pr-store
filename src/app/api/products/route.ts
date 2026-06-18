@@ -1,167 +1,154 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { productCreateSchema, productQuerySchema } from '@/lib/validations';
+import { getCached, setCache, invalidateCache } from '@/lib/redis';
+import { getClientIP } from '@/lib/utils';
+import { checkRateLimit, apiRateLimiter } from '@/lib/redis';
+import { getAuthUser, isManager } from '@/lib/auth';
 
 const SEED_PRODUCTS = [
-  {
-    name: 'Nike Air Jordan 1 Retro High Gold',
-    slug: 'jordan-1-gold',
-    price: 1899.90,
-    promoPrice: 1599.90,
-    category: 'Tenis',
-    brand: 'Nike Jordan',
-    sizes: ['40', '41', '42', '43'],
-    images: ['#jordan'],
-    stock: 5,
-  },
-  {
-    name: 'Supreme Box Logo Hoodie Black/Gold',
-    slug: 'supreme-bogo-gold',
-    price: 1499.90,
-    category: 'Roupas',
-    brand: 'Supreme',
-    sizes: ['M', 'G', 'GG'],
-    images: ['#hoodie'],
-    stock: 3,
-  },
-  {
-    name: 'Yeezy Boost 350 V2 Luxury Accent',
-    slug: 'yeezy-350-luxury',
-    price: 1699.90,
-    promoPrice: 1399.90,
-    category: 'Tenis',
-    brand: 'Adidas',
-    sizes: ['38', '39', '40', '41'],
-    images: ['#yeezy'],
-    stock: 8,
-  },
-  {
-    name: 'PR Store Classic Crown Gold Necklace',
-    slug: 'pr-crown-gold-necklace',
-    price: 499.90,
-    category: 'Acessorios',
-    brand: 'PR Store',
-    sizes: ['Unico'],
-    images: ['#necklace'],
-    stock: 12,
-  },
-  {
-    name: 'Off-White Industrial Belt Gold Edition',
-    slug: 'off-white-industrial-gold',
-    price: 799.90,
-    category: 'Acessorios',
-    brand: 'Off-White',
-    sizes: ['Unico'],
-    images: ['#belt'],
-    stock: 2,
-  }
+  { name: 'Nike Air Jordan 1 Retro High Gold', slug: 'jordan-1-gold', price: 1899.90, promoPrice: 1599.90, category: 'Tenis', brand: 'Nike Jordan', sizes: ['40', '41', '42', '43'], images: [], stock: 5, description: 'Streetwear de luxo - Nike Air Jordan 1 Retro High Gold' },
+  { name: 'Supreme Box Logo Hoodie Black/Gold', slug: 'supreme-bogo-gold', price: 1499.90, promoPrice: null, category: 'Roupas', brand: 'Supreme', sizes: ['M', 'G', 'GG'], images: [], stock: 3, description: 'Streetwear de luxo - Supreme Box Logo Hoodie' },
+  { name: 'Yeezy Boost 350 V2 Luxury Accent', slug: 'yeezy-350-luxury', price: 1699.90, promoPrice: 1399.90, category: 'Tenis', brand: 'Adidas', sizes: ['38', '39', '40', '41'], images: [], stock: 8, description: 'Streetwear de luxo - Yeezy Boost 350 V2' },
+  { name: 'PR Store Classic Crown Gold Necklace', slug: 'pr-crown-gold-necklace', price: 499.90, promoPrice: null, category: 'Acessorios', brand: 'PR Store', sizes: ['Unico'], images: [], stock: 12, description: 'Colar exclusivo PR Store Crown Gold' },
+  { name: 'Off-White Industrial Belt Gold Edition', slug: 'off-white-industrial-gold', price: 799.90, promoPrice: null, category: 'Acessorios', brand: 'Off-White', sizes: ['Unico'], images: [], stock: 2, description: 'Cinto Off-White Industrial Gold Edition' },
 ];
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get('category');
-  const page = parseInt(searchParams.get('page') || '1');
-  const limit = 50; // Retrieve more to avoid early pagination limits on catalog
-  const skip = (page - 1) * limit;
-
   try {
+    // Rate limit
+    const ip = getClientIP(request);
+    const rl = await checkRateLimit(apiRateLimiter, `products:${ip}`);
+    if (!rl.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
+    // Parse & validate query params
+    const { searchParams } = new URL(request.url);
+    const query = productQuerySchema.safeParse({
+      category: searchParams.get('category') || 'All',
+      brand: searchParams.get('brand') || undefined,
+      page: searchParams.get('page') || '1',
+      limit: searchParams.get('limit') || '20',
+      cursor: searchParams.get('cursor') || undefined,
+    });
+
+    const params = query.success ? query.data : { category: 'All' as const, page: 1, limit: 20 };
+
+    // Cache check
+    const cacheKey = `products:${params.category}:${params.page}`;
+    const cached = await getCached<{ products: unknown[] }>(cacheKey);
+    if (cached) return NextResponse.json({ success: true, ...cached });
+
+    // Database query with selective projection
+    const where = {
+      isActive: true,
+      ...(params.category !== 'All' ? { category: params.category } : {}),
+      ...(params.brand ? { brand: params.brand } : {}),
+    };
+
     let products = await db.produto.findMany({
-      where: category && category !== 'All' ? { category } : undefined,
+      where,
       select: {
         id: true,
         name: true,
         slug: true,
         price: true,
         promoPrice: true,
+        promoUntil: true,
         category: true,
         brand: true,
         sizes: true,
         images: true,
         stock: true,
       },
-      skip,
-      take: limit,
+      skip: ((params.page || 1) - 1) * (params.limit || 20),
+      take: params.limit || 20,
       orderBy: { createdAt: 'desc' },
     });
 
-    // Auto-seed if database is empty so that it never shows a blank storefront
-    if (products.length === 0 && (!category || category === 'All') && page === 1) {
-      console.log('Seeding initial products into Supabase...');
-      await Promise.all(SEED_PRODUCTS.map(async (p) => {
-        const slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-        return db.produto.create({
+    // Auto-seed if empty
+    if (products.length === 0 && params.category === 'All' && params.page === 1) {
+      await Promise.all(SEED_PRODUCTS.map((p) =>
+        db.produto.create({
           data: {
-            name: p.name,
-            slug: `${slug}-${Math.floor(Math.random() * 1000)}`,
-            description: `Streetwear de luxo - ${p.name}`,
-            price: p.price,
-            promoPrice: p.promoPrice || null,
-            category: p.category,
-            brand: p.brand,
-            sizes: p.sizes,
-            images: p.images,
-            stock: p.stock,
-          }
-        });
-      }));
-
-      // Re-fetch
+            ...p,
+            slug: `${p.slug}-${Math.floor(Math.random() * 1000)}`,
+          },
+        })
+      ));
       products = await db.produto.findMany({
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          price: true,
-          promoPrice: true,
-          category: true,
-          brand: true,
-          sizes: true,
-          images: true,
-          stock: true,
-        },
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, price: true, promoPrice: true, promoUntil: true, category: true, brand: true, sizes: true, images: true, stock: true },
         orderBy: { createdAt: 'desc' },
       });
     }
 
-    return NextResponse.json({ success: true, products });
+    const result = { products };
+    await setCache(cacheKey, result, 60);
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    console.warn('DB connect failed, falling back to mock data:', error);
-    return NextResponse.json({ 
-      success: true, 
-      products: SEED_PRODUCTS.map((p, idx) => ({ ...p, id: (idx + 1).toString() }))
+    console.error('Products GET error:', error);
+    // Fallback to seed data
+    return NextResponse.json({
+      success: true,
+      products: SEED_PRODUCTS.map((p, idx) => ({ ...p, id: String(idx + 1) })),
     });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { name, price, stock, category, brand, image, sizes } = body;
+    const user = await getAuthUser();
+    if (!isManager(user)) {
+      return NextResponse.json(
+        { success: false, error: 'Apenas gerentes e administradores podem cadastrar produtos.' },
+        { status: 403 }
+      );
+    }
 
-    const slug = name
+    const body = await request.json();
+    const parsed = productCreateSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const data = parsed.data;
+    const slug = data.name
       .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '') + '-' + Math.floor(Math.random() * 1000);
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '')
+      + '-' + Math.floor(Math.random() * 10000);
 
     const product = await db.produto.create({
       data: {
-        name,
+        name: data.name,
         slug,
-        description: `Streetwear de luxo - ${name}`,
-        price: parseFloat(price),
-        stock: parseInt(stock),
-        category,
-        brand: brand || 'PR Store',
-        images: [image || '👟'],
-        sizes: sizes || ['39', '40', '41'],
+        description: data.description || `Streetwear de luxo - ${data.name}`,
+        price: data.price,
+        promoPrice: data.promoPrice || null,
+        stock: data.stock,
+        category: data.category,
+        brand: data.brand || 'PR Store',
+        images: data.images || [],
+        sizes: data.sizes,
       },
     });
 
+    // Invalidate product cache
+    await invalidateCache('products:*');
+
     return NextResponse.json({ success: true, product });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to create product in DB:', error);
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Products POST error:', error);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

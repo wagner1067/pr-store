@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "title": "PR Store | Moda Masculina & Streetwear Premium",
+    "description": "E-commerce de lujo con catálogo exclusivo de ropa, zapatillas y accesorios premium streetwear. Stock físico sincronizado en tiempo real."
+  },
+  "nav": {
+    "brands": "Marcas",
+    "sneakers": "Zapatillas",
+    "clothing": "Ropa",
+    "categories": "Categorías",
+    "accessories": "Accesorios",
+    "news": "Novedades",
+    "erpPanel": "Panel ERP"
+  },
+  "hero": {
+    "badge": "Oferta Relámpago",
+    "title": "Oferta Relámpago",
+    "subtitle": "Colección Streetwear",
+    "description": "Obtenga prendas streetwear importadas exclusivas con stock físico sincronizado en tiempo real.",
+    "cta": "Comprar Ahora",
+    "luxuryEdition": "Edición de Lujo",
+    "days": "Días",
+    "hours": "Horas",
+    "minutes": "Minutos",
+    "seconds": "Segundos"
+  },
+  "categories": {
+    "title": "Categorías",
+    "subtitle": "Buscar ropa y accesorios",
+    "all": "Todas las Piezas",
+    "shoes": "Calzado",
+    "clothes": "Ropa",
+    "accessories": "Accesorios"
+  },
+  "showcase": {
+    "title": "Escaparate Streetwear",
+    "showing": "Mostrando",
+    "itemsFound": "artículos encontrados",
+    "filters": "Filtros",
+    "addToBag": "Añadir a la Bolsa",
+    "chooseSize": "Elija el tamaño",
+    "outOfStock": "Agotado",
+    "promo": "OFERTA"
+  },
+  "cart": {
+    "title": "Bolsa de Compras",
+    "empty": "La bolsa está vacía. Añade artículos de la tienda.",
+    "shippingLabel": "Cálculo de Envío (Código Postal):",
+    "subtotal": "Subtotal:",
+    "shipping": "Envío:",
+    "total": "Total:",
+    "checkout": "Finalizar Compra Segura",
+    "processing": "Procesando...",
+    "calculate": "Calcular",
+    "free": "Gratis",
+    "yourDetails": "Tus Datos",
+    "fullName": "Nombre completo",
+    "whatsapp": "WhatsApp (con código de área)",
+    "paymentMethod": "Método de Pago",
+    "continue": "Continuar"
+  },
+  "lead": {
+    "title": "Miembro PR Store",
+    "description": "Ingrese su WhatsApp a continuación para recibir noticias exclusivas y desbloquear un cupón de bienvenida de 10%.",
+    "button": "Canjear Cupón de Lujo",
+    "success": "¡Miembro Activado! Su cupón de 10% ha sido registrado.",
+    "placeholder": "Su WhatsApp con código de área"
+  },
+  "chat": {
+    "greeting": "¡Hola! Soy el asistente de IA de PR Store. ¿Tiene preguntas sobre tallas o stock?",
+    "placeholder": "Escriba su pregunta...",
+    "title": "Soporte PR Store"
+  },
+  "checkout": {
+    "pixTitle": "Pago vía Pix",
+    "pixInstructions": "Escanee el código QR o copie la clave Pix para realizar el pago.",
+    "copyKey": "Copiar Clave Pix",
+    "copied": "¡Copiado!",
+    "cardTitle": "Pago con Tarjeta",
+    "cardNumber": "Número de Tarjeta",
+    "cardName": "Nombre en la Tarjeta",
+    "cardExpiry": "Vencimiento (MM/AA)",
+    "cardCvv": "CVV",
+    "payNow": "Pagar Ahora",
+    "successTitle": "¡Pedido Confirmado!",
+    "successMessage": "Su pedido ha sido registrado con éxito en PR Store."
+  },
+  "footer": {
+    "rights": "Todos los derechos reservados.",
+    "tagline": "Moda Masculina y Accesorios Premium"
+  },
+  "filter": {
+    "title": "Filtrar Productos",
+    "brand": "Marca",
+    "allBrands": "Todas",
+    "category": "Categoría",
+    "apply": "Aplicar Filtros",
+    "clear": "Limpiar"
+  }
+}

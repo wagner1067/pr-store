@@ -1,5 +1,5 @@
-import React from 'react';
+import { CartProvider } from '@/lib/cart-store';
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <CartProvider>{children}</CartProvider>;
 }

@@ -1,13 +1,44 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════
+   PR STORE — LUXURY DESIGN SYSTEM
+   Gold (#d4af37) on Deep Black (#09090b)
+   ═══════════════════════════════════════════════════════ */
+
 :root {
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #f4f4f5;
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  --primary: #d4af37;
+  --primary-foreground: #09090b;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #09090b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #09090b;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #d4af37;
+  --radius: 8px;
+  --gold-gradient: linear-gradient(135deg, #d4af37 0%, #f0d060 50%, #d4af37 100%);
+}
+
+.dark {
   --background: #09090b;
   --foreground: #f4f4f5;
-  --card: #18181b;
+  --card: #121214;
   --card-foreground: #f4f4f5;
   --popover: #09090b;
   --popover-foreground: #f4f4f5;
-  --primary: #d4af37; /* Luxury Gold */
+  --primary: #d4af37;
   --primary-foreground: #09090b;
   --secondary: #27272a;
   --secondary-foreground: #f4f4f5;
@@ -17,33 +48,139 @@
   --accent-foreground: #f4f4f5;
   --destructive: #ef4444;
   --destructive-foreground: #f4f4f5;
+  --success: #22c55e;
+  --warning: #f59e0b;
   --border: #27272a;
   --input: #27272a;
   --ring: #d4af37;
-  --radius: 8px;
 }
 
-@theme {
+@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
+
+/* ═══ Animations ═══ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+  .animate-slideUp {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 25%, rgba(212,175,55,0.08) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+  .animate-pulse-gold {
+    animation: pulse-gold 2s infinite;
+  }
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+}
+
+/* ═══ Base Styles ═══ */
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Inter, sans-serif;
+  font-family: var(--font-geist-sans, 'Inter', system-ui, -apple-system, sans-serif);
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══ Scrollbar ═══ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ═══ Gold Gradient Text ═══ */
+
+.text-gold-gradient {
+  background: var(--gold-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══ Glass Effect ═══ */
+
+.glass {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ═══ Selection Color ═══ */
+
+::selection {
+  background-color: rgba(212, 175, 55, 0.3);
+  color: var(--foreground);
 }

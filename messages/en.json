@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "title": "PR Store | Men's Fashion & Premium Streetwear",
+    "description": "Luxury e-commerce with an exclusive catalog of premium streetwear clothing, sneakers, and accessories. Physical stock synchronized in real-time."
+  },
+  "nav": {
+    "brands": "Brands",
+    "sneakers": "Sneakers",
+    "clothing": "Clothing",
+    "categories": "Categories",
+    "accessories": "Accessories",
+    "news": "New Arrivals",
+    "erpPanel": "ERP Panel"
+  },
+  "hero": {
+    "badge": "Lightning Deal",
+    "title": "Lightning Deal",
+    "subtitle": "Streetwear Collection",
+    "description": "Get exclusive imported streetwear items with physical stock synchronized in real-time.",
+    "cta": "Shop Now",
+    "luxuryEdition": "Luxury Edition",
+    "days": "Days",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds"
+  },
+  "categories": {
+    "title": "Categories",
+    "subtitle": "Search apparel and accessories",
+    "all": "All Items",
+    "shoes": "Sneakers",
+    "clothes": "Clothing",
+    "accessories": "Accessories"
+  },
+  "showcase": {
+    "title": "Streetwear Showcase",
+    "showing": "Showing",
+    "itemsFound": "items found",
+    "filters": "Filters",
+    "addToBag": "Add to Bag",
+    "chooseSize": "Choose size",
+    "outOfStock": "Sold Out",
+    "promo": "SALE"
+  },
+  "cart": {
+    "title": "Shopping Bag",
+    "empty": "Bag is empty. Add items from the storefront.",
+    "shippingLabel": "Shipping Estimate (ZIP):",
+    "subtotal": "Subtotal:",
+    "shipping": "Shipping:",
+    "total": "Total:",
+    "checkout": "Secure Checkout",
+    "processing": "Processing...",
+    "calculate": "Calculate",
+    "free": "Free",
+    "yourDetails": "Your Details",
+    "fullName": "Full name",
+    "whatsapp": "WhatsApp (with area code)",
+    "paymentMethod": "Payment Method",
+    "continue": "Continue"
+  },
+  "lead": {
+    "title": "PR Store Member",
+    "description": "Enter your WhatsApp below to receive exclusive news and unlock a 10% welcome coupon.",
+    "button": "Claim Luxury Coupon",
+    "success": "Member Activated! Your 10% coupon has been registered.",
+    "placeholder": "Your WhatsApp with area code"
+  },
+  "chat": {
+    "greeting": "Hello! I'm the PR Store AI assistant. Have questions about sizes or stock?",
+    "placeholder": "Type your question...",
+    "title": "PR Store Support"
+  },
+  "checkout": {
+    "pixTitle": "Pay via Pix",
+    "pixInstructions": "Scan the QR Code or copy the Pix key to make payment.",
+    "copyKey": "Copy Pix Key",
+    "copied": "Copied!",
+    "cardTitle": "Card Payment",
+    "cardNumber": "Card Number",
+    "cardName": "Name on Card",
+    "cardExpiry": "Expiry (MM/YY)",
+    "cardCvv": "CVV",
+    "payNow": "Pay Now",
+    "successTitle": "Order Confirmed!",
+    "successMessage": "Your order has been successfully registered at PR Store."
+  },
+  "footer": {
+    "rights": "All rights reserved.",
+    "tagline": "Men's Fashion & Premium Accessories"
+  },
+  "filter": {
+    "title": "Filter Products",
+    "brand": "Brand",
+    "allBrands": "All",
+    "category": "Category",
+    "apply": "Apply Filters",
+    "clear": "Clear"
+  }
+}

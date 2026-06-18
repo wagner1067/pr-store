@@ -1,0 +1,14 @@
+# PR Store — robots.txt
+# Block all crawlers from admin/ERP and API routes
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /api/admin/
+Disallow: /api/auth/
+Disallow: /api/webhooks/
+
+# Sitemap
+Sitemap: https://prstore.vercel.app/sitemap.xml
