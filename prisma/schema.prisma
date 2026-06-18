@@ -1,12 +1,16 @@
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("SUPABASE_SERVICE_ROLE_KEY") // Conexão direta segura para migrações
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
+
+// ═══════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════
 
 enum Role {
   DONO
@@ -28,103 +32,174 @@ enum ShippingMethod {
   RETIRADA
 }
 
+enum OrderStatus {
+  PENDENTE
+  PAGO
+  ENVIADO
+  ENTREGUE
+  CANCELADO
+}
+
+enum ExpenseCategory {
+  FIXO
+  VARIAVEL
+}
+
+// ═══════════════════════════════════════════
+// MODELS
+// ═══════════════════════════════════════════
+
 model Usuario {
-  id            String   @id @default(uuid())
-  name          String
-  email         String   @unique
-  phone         String   @unique // Usado para verificação 2FA via SMS
-  password      String   // Senha criptografada (Hash)
-  role          Role     @default(FUNCIONARIO)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String   @unique
+  password  String   // BCrypt hash
+  role      Role     @default(FUNCIONARIO)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   vendasPresenciais Venda[] @relation("Vendedor")
+
+  @@index([email])
+  @@index([role])
 }
 
 model Cliente {
   id        String   @id @default(uuid())
   name      String?
-  phone     String   @unique // Identificador principal capturado no modal do WhatsApp
+  phone     String   @unique
+  email     String?
   createdAt DateTime @default(now())
-  
+
   pedidos      Pedido[]
   promissorias Promissoria[]
+
+  @@index([phone])
+  @@index([createdAt])
 }
 
 model Produto {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
-  slug        String   @unique // URL amigável otimizada para SEO Técnico
+  slug        String    @unique
   description String
   price       Float
-  promoPrice  Float?   // Preço de promoção relâmpago
-  promoUntil  DateTime? // Data/Hora limite para expiração da promoção relâmpago
-  category    String   // Roupas, Tênis, Acessórios
-  brand       String   // Filtro dinâmico por Marca (Ex: Nike, Adidas)
-  sizes       String[] // Grade de tamanhos disponíveis
-  images      String[] // URLs das mídias tratadas e hospedadas no Firebase Storage
-  stock       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  promoPrice  Float?
+  promoUntil  DateTime?
+  category    String
+  brand       String
+  sizes       String[]
+  images      String[]
+  stock       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   itensPedido ItemPedido[]
 
-  @@index([category, brand]) // Índice relacional para acelerar buscas do catálogo no Supabase
+  @@index([category, brand])
   @@index([slug])
+  @@index([category])
+  @@index([brand])
+  @@index([isActive, createdAt])
+  @@index([stock])
 }
 
 model Pedido {
   id             String         @id @default(uuid())
   clienteId      String
   total          Float
-  status         String         @default("PENDENTE")
+  status         OrderStatus    @default(PENDENTE)
   paymentMethod  PaymentMethod
   shippingMethod ShippingMethod
   shippingCost   Float          @default(0.0)
+  stripeSessionId String?
   createdAt      DateTime       @default(now())
-  
-  cliente        Cliente        @relation(fields: [clienteId], references: [id])
-  itens          ItemPedido[]
+  updatedAt      DateTime       @updatedAt
+
+  cliente Cliente      @relation(fields: [clienteId], references: [id])
+  itens   ItemPedido[]
+
+  @@index([clienteId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([paymentMethod])
 }
 
 model ItemPedido {
-  id        String  @id @default(uuid())
+  id        String @id @default(uuid())
   pedidoId  String
   produtoId String
   quantity  Int
-  price     Float   // Salva o preço cobrado no momento da venda
+  price     Float
+  size      String?
 
-  pedido    Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  produto   Produto @relation(fields: [produtoId], references: [id])
+  pedido  Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id])
+
+  @@index([pedidoId])
+  @@index([produtoId])
 }
 
 model Venda {
   id            String        @id @default(uuid())
-  vendedorId    String?       // Se nulo, foi venda direta online pelo e-commerce
+  vendedorId    String?
   total         Float
   paymentMethod PaymentMethod
-  isPresencial  Boolean       @default(false) // Diferencia PDV de Loja Online
+  isPresencial  Boolean       @default(false)
   createdAt     DateTime      @default(now())
 
-  vendedor      Usuario?      @relation("Vendedor", fields: [vendedorId], references: [id])
+  vendedor Usuario? @relation("Vendedor", fields: [vendedorId], references: [id])
+
+  @@index([createdAt])
+  @@index([isPresencial])
+  @@index([paymentMethod])
+  @@index([vendedorId])
 }
 
 model Promissoria {
   id         String   @id @default(uuid())
   clienteId  String
-  totalDebt  Float    // Valor acumulado em aberto "No Fio"
-  dueDate    DateTime // Data de vencimento limite
+  totalDebt  Float
+  dueDate    DateTime
   isOverdue  Boolean  @default(false)
+  isPaid     Boolean  @default(false)
+  createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
+  @@index([dueDate])
+  @@index([isOverdue])
+  @@index([isPaid])
 }
 
 model RegistroCaixa {
-  id          String   @id @default(uuid())
-  openedAt    DateTime @default(now())
+  id          String    @id @default(uuid())
+  openedAt    DateTime  @default(now())
   closedAt    DateTime?
   initialAmt  Float
   finalAmt    Float?
-  isBalanced  Boolean  @default(false) // "Se o caixa bateu no final do dia"
-  expenses    Float    @default(0.0)   // Abatimento de custos fixos e variáveis
+  isBalanced  Boolean   @default(false)
+  notes       String?
+
+  despesas Despesa[]
+
+  @@index([openedAt])
+}
+
+model Despesa {
+  id          String          @id @default(uuid())
+  description String
+  value       Float
+  category    ExpenseCategory @default(VARIAVEL)
+  caixaId     String?
+  createdAt   DateTime        @default(now())
+
+  caixa RegistroCaixa? @relation(fields: [caixaId], references: [id])
+
+  @@index([createdAt])
+  @@index([category])
 }
