@@ -374,13 +374,22 @@ export default function Home() {
           clientPhone: customerPhone,
           clientName: customerName,
           shippingCost: shippingCost || 0,
-          shippingMethod: shippingMethod || 'Retirada em Mãos',
+          shippingMethod: shippingMethod || 'RETIRADA',
         }),
       });
 
       const data = await response.json();
       if (data.success) {
-        // PIX flow: show details screen
+        // Mercado Pago Checkout Pro → redireciona ao ambiente de pagamento
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+        // Fluxo PIX legado: show details screen
         setPixDetails({
           qrCode: data.qrCode,
           barcode: data.barcode,
@@ -421,17 +430,21 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: checkoutItems,
-          paymentMethod: 'CARD',
+          paymentMethod: 'CARTAO_CREDITO',
           clientPhone: customerPhone,
           clientName: customerName,
           shippingCost: shippingCost || 0,
-          shippingMethod: shippingMethod || 'Retirada em Mãos',
+          shippingMethod: shippingMethod || 'RETIRADA',
           simulatedCardStatus: simulatedStatus,
         }),
       });
 
       const data = await response.json();
       if (data.success) {
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
         if (data.url && !isRefused) {
           window.location.href = data.url;
         } else {
