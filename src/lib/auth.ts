@@ -18,9 +18,17 @@ export interface AuthUser {
 export async function getAuthUser(): Promise<AuthUser | null> {
   try {
     const cookieStore = await cookies();
-    const mockCookie = cookieStore.get('pr-store-mock-auth');
-    if (mockCookie) {
-      return JSON.parse(mockCookie.value);
+
+    // Dev-only mock bypass — NUNCA confiar neste cookie em produção.
+    if (process.env.NODE_ENV !== 'production') {
+      const mockCookie = cookieStore.get('pr-store-mock-auth');
+      if (mockCookie) {
+        try {
+          return JSON.parse(mockCookie.value);
+        } catch {
+          return null;
+        }
+      }
     }
 
     const supabase = await createSupabaseServerClient();

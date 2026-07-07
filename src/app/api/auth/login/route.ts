@@ -30,8 +30,12 @@ export async function POST(request: Request) {
 
     const { email, password } = parsed.data;
 
-    // --- Dev / Mock Bypass ---
-    if (email === 'admin@prstore.com' && password === 'admin123') {
+    // --- Dev / Mock Bypass (DESATIVADO EM PRODUÇÃO) ---
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      email === 'admin@prstore.com' &&
+      password === 'admin123'
+    ) {
       const cookieStore = await cookies();
       cookieStore.set('pr-store-mock-auth', JSON.stringify({
         id: 'mock-owner-id',
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
         name: 'Wagner (Admin)'
       }), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: false, // bloco dev-only (nunca roda em produção)
         sameSite: 'strict',
         maxAge: 60 * 60 * 24 // 1 day
       });

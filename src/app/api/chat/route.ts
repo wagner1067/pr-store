@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { chatMessageSchema } from '@/lib/validations';
-import { checkRateLimit, chatRateLimiter } from '@/lib/redis';
+import { checkRateLimit, chatRateLimiter, withCache } from '@/lib/redis';
 import { getClientIP } from '@/lib/utils';
+
+// Normalize message for cache key: lowercase, trim, remove punctuation
+function normalizeMsg(msg: string) {
+  return msg.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 80);
+}
 
 const KNOWLEDGE_BASE: Record<string, string> = {
   frete: 'Oferecemos frete expresso local via Moto Frete para CEPs da região de fronteira começando com 85, e envios via Correios PAC/SEDEX para todo o Brasil. A retirada em mãos é gratuita em nossa loja física.',
@@ -66,48 +71,53 @@ export async function POST(request: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (apiKey) {
       try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: `Você é o assistente inteligente da PR Store, e-commerce e loja física premium de streetwear (tênis de luxo, roupas e acessórios streetwear).
-                Use esta base de conhecimento para orientar suas respostas se for relevante, mas responda de forma natural, humana e prestativa:
-                - Frete/Entrega: ${KNOWLEDGE_BASE.frete}
-                - Crediário/Promissória: ${KNOWLEDGE_BASE.promissoria}
-                - Pagamentos: ${KNOWLEDGE_BASE.pagamento}
-                - Tamanhos: ${KNOWLEDGE_BASE.tamanho}
-                - Trocas: ${KNOWLEDGE_BASE.troca}
-                - Estoque: ${KNOWLEDGE_BASE.estoque}
-                - Contato WhatsApp: (45) 99988-7766`
-              },
-              { role: 'user', content: message }
-            ],
-            temperature: 0.7,
-            max_tokens: 300,
-          }),
+        // Cache OpenAI replies for 10 minutes (per normalized message)
+        const cacheKey = `chat:openai:${normalizeMsg(message)}`;
+        const reply = await withCache<string>(cacheKey, 600, async () => {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'system',
+                  content: `Você é o assistente inteligente da PR Store, e-commerce e loja física premium de streetwear (tênis de luxo, roupas e acessórios streetwear).
+                  Use esta base de conhecimento para orientar suas respostas se for relevante, mas responda de forma natural, humana e prestativa:
+                  - Frete/Entrega: ${KNOWLEDGE_BASE.frete}
+                  - Crediário/Promissória: ${KNOWLEDGE_BASE.promissoria}
+                  - Pagamentos: ${KNOWLEDGE_BASE.pagamento}
+                  - Tamanhos: ${KNOWLEDGE_BASE.tamanho}
+                  - Trocas: ${KNOWLEDGE_BASE.troca}
+                  - Estoque: ${KNOWLEDGE_BASE.estoque}
+                  - Contato WhatsApp: (45) 99988-7766`,
+                },
+                { role: 'user', content: message },
+              ],
+              temperature: 0.7,
+              max_tokens: 300,
+            }),
+          });
+
+          if (!response.ok) throw new Error(`OpenAI error: ${response.status}`);
+          const resData = await response.json();
+          const text = resData.choices?.[0]?.message?.content?.trim();
+          if (!text) throw new Error('Empty response');
+          return text;
         });
 
-        if (response.ok) {
-          const resData = await response.json();
-          const reply = resData.choices?.[0]?.message?.content?.trim();
-          if (reply) {
-            return NextResponse.json({ success: true, reply });
-          }
-        }
+        return NextResponse.json({ success: true, reply });
       } catch (err) {
         console.error('OpenAI query failed, falling back to local matches:', err);
       }
     }
 
-    // Fallback response using local keyword matching
-    const reply = getAIResponse(message);
+    // Fallback: keyword matching — cache for 30 minutes (deterministic)
+    const cacheKey = `chat:kw:${normalizeMsg(message)}`;
+    const reply = await withCache<string>(cacheKey, 1800, async () => getAIResponse(message));
     return NextResponse.json({ success: true, reply });
   } catch (error) {
     console.error('Chat API error:', error);

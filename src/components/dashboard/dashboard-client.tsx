@@ -120,11 +120,16 @@ export function DashboardClient({ user }: DashboardClientProps) {
 
   const isManagerOrOwner = user.role === 'DONO' || user.role === 'GERENTE';
 
+  // ── Atualização em tempo real ──────────────────────────────────────────────
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const REFRESH_INTERVAL_MS = 30000;
+
   // Fetch Admin Data
-  const fetchData = async () => {
+  const fetchData = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
-      setIsLoading(true);
-      const res = await fetch('/api/admin');
+      if (!silent) setIsLoading(true);
+      const res = await fetch('/api/admin', { cache: 'no-store' });
       const data = await res.json();
       
       if (data.success) {
@@ -155,12 +160,24 @@ export function DashboardClient({ user }: DashboardClientProps) {
       setError('Erro de conexão ao carregar dados.');
     } finally {
       setIsLoading(false);
+      setLastUpdated(new Date());
     }
   };
 
   useEffect(() => {
     fetchData();
   }, [currentTab]);
+
+  // Polling em tempo real — atualiza silenciosamente em segundo plano.
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return; // pausa se aba oculta
+      fetchData({ silent: true });
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, currentTab]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -459,6 +476,9 @@ export function DashboardClient({ user }: DashboardClientProps) {
           }
           isCaixaOpen={!!activeCaixa}
           caixaInitialAmt={activeCaixa ? activeCaixa.initialAmt : null}
+          lastUpdated={lastUpdated}
+          autoRefresh={autoRefresh}
+          onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
         />
 
         <main className="p-8 flex-1 overflow-y-auto">
