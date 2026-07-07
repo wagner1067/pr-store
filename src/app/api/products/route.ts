@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { productCreateSchema, productQuerySchema } from '@/lib/validations';
-import { getCached, setCache, invalidateCache } from '@/lib/redis';
+import { withCache, invalidateCache, checkRateLimit, apiRateLimiter, CACHE_KEYS, TTL } from '@/lib/redis';
 import { getClientIP } from '@/lib/utils';
-import { checkRateLimit, apiRateLimiter } from '@/lib/redis';
 import { getAuthUser, isManager } from '@/lib/auth';
 
 const SEED_PRODUCTS = [
@@ -14,16 +13,15 @@ const SEED_PRODUCTS = [
   { name: 'Off-White Industrial Belt Gold Edition', slug: 'off-white-industrial-gold', price: 799.90, promoPrice: null, category: 'Acessorios', brand: 'Off-White', sizes: ['Unico'], images: [], stock: 2, description: 'Cinto Off-White Industrial Gold Edition' },
 ];
 
+// ─── GET — Product listing (cached) ──────────────────────────────────────────
 export async function GET(request: Request) {
   try {
-    // Rate limit
     const ip = getClientIP(request);
     const rl = await checkRateLimit(apiRateLimiter, `products:${ip}`);
     if (!rl.success) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    // Parse & validate query params
     const { searchParams } = new URL(request.url);
     const query = productQuerySchema.safeParse({
       category: searchParams.get('category') || 'All',
@@ -34,63 +32,61 @@ export async function GET(request: Request) {
     });
 
     const params = query.success ? query.data : { category: 'All' as const, page: 1, limit: 20 };
+    const cacheKey = CACHE_KEYS.productsList(params.category, params.page ?? 1);
 
-    // Cache check
-    const cacheKey = `products:${params.category}:${params.page}`;
-    const cached = await getCached<{ products: unknown[] }>(cacheKey);
-    if (cached) return NextResponse.json({ success: true, ...cached });
+    const result = await withCache(
+      cacheKey,
+      TTL.PRODUCTS_LIST,
+      async () => {
+        const where = {
+          isActive: true,
+          ...(params.category !== 'All' ? { category: params.category } : {}),
+          ...('brand' in params && params.brand ? { brand: params.brand } : {}),
+        };
 
-    // Database query with selective projection
-    const where = {
-      isActive: true,
-      ...(params.category !== 'All' ? { category: params.category } : {}),
-      ...(params.brand ? { brand: params.brand } : {}),
-    };
-
-    let products = await db.produto.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        price: true,
-        promoPrice: true,
-        promoUntil: true,
-        category: true,
-        brand: true,
-        sizes: true,
-        images: true,
-        stock: true,
-      },
-      skip: ((params.page || 1) - 1) * (params.limit || 20),
-      take: params.limit || 20,
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Auto-seed if empty
-    if (products.length === 0 && params.category === 'All' && params.page === 1) {
-      await Promise.all(SEED_PRODUCTS.map((p) =>
-        db.produto.create({
-          data: {
-            ...p,
-            slug: `${p.slug}-${Math.floor(Math.random() * 1000)}`,
+        let products = await db.produto.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            price: true,
+            promoPrice: true,
+            promoUntil: true,
+            category: true,
+            brand: true,
+            sizes: true,
+            images: true,
+            stock: true,
           },
-        })
-      ));
-      products = await db.produto.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true, slug: true, price: true, promoPrice: true, promoUntil: true, category: true, brand: true, sizes: true, images: true, stock: true },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
+          skip: ((params.page ?? 1) - 1) * (params.limit ?? 20),
+          take: params.limit ?? 20,
+          orderBy: { createdAt: 'desc' },
+        });
 
-    const result = { products };
-    await setCache(cacheKey, result, 60);
+        // Auto-seed if empty
+        if (products.length === 0 && params.category === 'All' && params.page === 1) {
+          await Promise.all(
+            SEED_PRODUCTS.map((p) =>
+              db.produto.create({
+                data: { ...p, slug: `${p.slug}-${Math.floor(Math.random() * 1000)}` },
+              })
+            )
+          );
+          products = await db.produto.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, slug: true, price: true, promoPrice: true, promoUntil: true, category: true, brand: true, sizes: true, images: true, stock: true },
+            orderBy: { createdAt: 'desc' },
+          });
+        }
+
+        return { products };
+      }
+    );
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error('Products GET error:', error);
-    // Fallback to seed data
     return NextResponse.json({
       success: true,
       products: SEED_PRODUCTS.map((p, idx) => ({ ...p, id: String(idx + 1) })),
@@ -98,6 +94,7 @@ export async function GET(request: Request) {
   }
 }
 
+// ─── POST — Create product (invalidates cache) ────────────────────────────────
 export async function POST(request: Request) {
   try {
     const user = await getAuthUser();
@@ -110,7 +107,6 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const parsed = productCreateSchema.safeParse(body);
-
     if (!parsed.success) {
       return NextResponse.json(
         { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
@@ -119,13 +115,15 @@ export async function POST(request: Request) {
     }
 
     const data = parsed.data;
-    const slug = data.name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '')
-      + '-' + Math.floor(Math.random() * 10000);
+    const slug =
+      data.name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '') +
+      '-' +
+      Math.floor(Math.random() * 10000);
 
     const product = await db.produto.create({
       data: {
@@ -142,8 +140,8 @@ export async function POST(request: Request) {
       },
     });
 
-    // Invalidate product cache
-    await invalidateCache('products:*');
+    // Bust all product list caches (wildcard pattern)
+    await invalidateCache('products:list:*');
 
     return NextResponse.json({ success: true, product });
   } catch (error) {

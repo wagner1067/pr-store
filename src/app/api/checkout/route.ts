@@ -1,20 +1,26 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { stripe } from '@/lib/stripe';
 import { checkoutSchema } from '@/lib/validations';
-import { checkRateLimit, checkoutRateLimiter } from '@/lib/redis';
+import { checkRateLimit, checkoutRateLimiter, invalidateCache } from '@/lib/redis';
 import { getClientIP } from '@/lib/utils';
+import {
+  createMercadoPagoPreference,
+  isMercadoPagoConfigured,
+} from '@/lib/mercadopago';
 
 export async function POST(request: Request) {
   try {
-    // Rate limit
+    // ── Rate limit ────────────────────────────────────────────────────────────
     const ip = getClientIP(request);
     const rl = await checkRateLimit(checkoutRateLimiter, `checkout:${ip}`);
     if (!rl.success) {
-      return NextResponse.json({ error: 'Muitas tentativas. Aguarde antes de tentar novamente.' }, { status: 429 });
+      return NextResponse.json(
+        { error: 'Muitas tentativas. Aguarde antes de tentar novamente.' },
+        { status: 429 }
+      );
     }
 
-    // Validate payload
+    // ── Validate payload ──────────────────────────────────────────────────────
     const body = await request.json();
     const parsed = checkoutSchema.safeParse(body);
 
@@ -25,154 +31,179 @@ export async function POST(request: Request) {
       );
     }
 
-    const { items, paymentMethod, clientPhone, clientName, shippingCost, shippingMethod } = parsed.data;
+    const { items, paymentMethod, clientPhone, clientName, shippingCost, shippingMethod } =
+      parsed.data;
 
-    const total = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    const finalTotal = total + (shippingCost || 0);
-
-    // Upsert client
+    // ── Upsert client (lead capture obrigatório) ──────────────────────────────
     const cliente = await db.cliente.upsert({
       where: { phone: clientPhone },
       update: clientName ? { name: clientName } : {},
       create: { name: clientName || 'Cliente E-commerce', phone: clientPhone },
     });
 
-    // Resolve product IDs and build order items
-    const itemCreates = [];
+    // ── Resolve products, validar preço e estoque a partir do BANCO ──────────
+    // SEGURANÇA: o preço NUNCA vem do cliente. Sempre usamos o preço do banco.
+    const itemCreates: { produtoId: string; quantity: number; price: number; name: string }[] = [];
+    const now = new Date();
+    let total = 0;
+
     for (const item of items) {
-      let prodId = item.id;
-      const dbProd = await db.produto.findUnique({ where: { id: item.id }, select: { id: true, stock: true } });
-
-      if (!dbProd) {
-        const found = await db.produto.findFirst({ where: { name: item.name }, select: { id: true } });
-        if (found) {
-          prodId = found.id;
-        } else {
-          const created = await db.produto.create({
-            data: {
-              name: item.name,
-              slug: `${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Math.floor(Math.random() * 1000)}`,
-              description: `Streetwear de luxo - ${item.name}`,
-              price: item.price,
-              category: 'Tenis',
-              brand: 'PR Store',
-              sizes: ['40'],
-              images: [],
-              stock: 5,
-            },
-          });
-          prodId = created.id;
-        }
-      } else {
-        // Decrement stock atomically
-        if (dbProd.stock > 0) {
-          await db.produto.update({
-            where: { id: dbProd.id },
-            data: { stock: { decrement: item.quantity } },
-          });
-        }
-      }
-
-      itemCreates.push({ produtoId: prodId, quantity: item.quantity, price: item.price });
-    }
-
-    // --- PIX Flow ---
-    if (paymentMethod === 'PIX') {
-      const pedido = await db.pedido.create({
-        data: {
-          clienteId: cliente.id,
-          total: finalTotal,
-          paymentMethod: 'PIX',
-          shippingMethod: shippingMethod || 'CORREIOS',
-          shippingCost: shippingCost || 0,
-          status: 'PENDENTE',
-          itens: { create: itemCreates },
+      const dbProd = await db.produto.findUnique({
+        where: { id: item.id },
+        select: {
+          id: true,
+          stock: true,
+          name: true,
+          price: true,
+          promoPrice: true,
+          promoUntil: true,
+          isActive: true,
         },
       });
 
-      await db.venda.create({
-        data: { total: finalTotal, paymentMethod: 'PIX', isPresencial: false },
+      // Rejeita item inexistente/inativo — nunca cria produto órfão.
+      if (!dbProd || !dbProd.isActive) {
+        return NextResponse.json(
+          { success: false, error: `Produto indisponível: ${item.name}` },
+          { status: 400 }
+        );
+      }
+
+      if (dbProd.stock < item.quantity) {
+        return NextResponse.json(
+          { success: false, error: `Produto "${dbProd.name}" sem estoque suficiente.` },
+          { status: 409 }
+        );
+      }
+
+      // Preço efetivo definido pelo servidor (respeita promoção válida).
+      const promoValida =
+        dbProd.promoPrice != null &&
+        (!dbProd.promoUntil || new Date(dbProd.promoUntil) > now);
+      const unitPrice = promoValida ? dbProd.promoPrice! : dbProd.price;
+
+      await db.produto.update({
+        where: { id: dbProd.id },
+        data: { stock: { decrement: item.quantity } },
       });
 
-      return NextResponse.json({
-        success: true,
-        method: 'PIX',
-        pedidoId: pedido.id,
-        qrCode: '00020126580014br.gov.bcb.pix0136prstore-pix',
-        barcode: '34191.79001 01043.513184 91020.150008 7 98760000015000',
+      total += unitPrice * item.quantity;
+      itemCreates.push({
+        produtoId: dbProd.id,
+        quantity: item.quantity,
+        price: unitPrice,
+        name: dbProd.name,
+      });
+    }
+
+    const finalTotal = total + (shippingCost || 0);
+
+    // Invalidate product cache after stock change
+    await invalidateCache('products:list:*');
+
+    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || '';
+
+    // ── Criar pedido PENDENTE no banco ────────────────────────────────────────
+    const pedido = await db.pedido.create({
+      data: {
+        clienteId: cliente.id,
         total: finalTotal,
-      });
-    }
-
-    // --- CARD Flow (Stripe) ---
-    if (paymentMethod === 'CARTAO_CREDITO' || paymentMethod === 'CARTAO_DEBITO') {
-      if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.includes('mock')) {
-        try {
-          const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: items.map((item) => ({
-              price_data: {
-                currency: 'brl',
-                product_data: { name: item.name },
-                unit_amount: Math.round(item.price * 100),
-              },
-              quantity: item.quantity,
-            })),
-            mode: 'payment',
-            success_url: `${request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL}/?checkout_success=true`,
-            cancel_url: `${request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL}/?checkout_cancel=true`,
-            metadata: {
-              clientPhone,
-              clientName: clientName || 'Cliente E-commerce',
-              items: JSON.stringify(items.map((i) => ({ id: i.id, qty: i.quantity }))),
-            },
-          });
-
-          // Save pending order with Stripe session ID
-          await db.pedido.create({
-            data: {
-              clienteId: cliente.id,
-              total: finalTotal,
-              paymentMethod: 'CARTAO_CREDITO',
-              shippingMethod: shippingMethod || 'CORREIOS',
-              shippingCost: shippingCost || 0,
-              status: 'PENDENTE',
-              stripeSessionId: session.id,
-              itens: { create: itemCreates },
-            },
-          });
-
-          return NextResponse.json({ success: true, url: session.url });
-        } catch (stripeErr) {
-          console.warn('Stripe session creation failed:', stripeErr);
-        }
-      }
-
-      // Fallback: create order as paid (dev mode)
-      const pedido = await db.pedido.create({
-        data: {
-          clienteId: cliente.id,
-          total: finalTotal,
-          paymentMethod: 'CARTAO_CREDITO',
-          shippingMethod: shippingMethod || 'CORREIOS',
-          shippingCost: shippingCost || 0,
-          status: 'PAGO',
-          itens: { create: itemCreates },
+        paymentMethod,
+        shippingMethod: shippingMethod || 'CORREIOS',
+        shippingCost: shippingCost || 0,
+        status: 'PENDENTE',
+        itens: {
+          create: itemCreates.map((it) => ({
+            produtoId: it.produtoId,
+            quantity: it.quantity,
+            price: it.price,
+          })),
         },
-      });
+      },
+    });
 
-      await db.venda.create({
-        data: { total: finalTotal, paymentMethod: 'CARTAO_CREDITO', isPresencial: false },
-      });
+    // ════════════════════════════════════════════════════════════════════════
+    // Mercado Pago Checkout Pro — PIX, Cartão e Boleto num único checkout.
+    // O cliente escolhe o método dentro do ambiente seguro do Mercado Pago.
+    // ════════════════════════════════════════════════════════════════════════
+    if (isMercadoPagoConfigured()) {
+      try {
+        const mpItems = itemCreates.map((it) => ({
+          title: it.name,
+          quantity: it.quantity,
+          unit_price: it.price,
+          currency_id: 'BRL',
+        }));
 
-      return NextResponse.json({
-        success: true,
-        pedidoId: pedido.id,
-        url: `${request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL}/?checkout_success=true&order_id=${pedido.id}`,
-      });
+        // Frete como item adicional (se houver).
+        if (shippingCost && shippingCost > 0) {
+          mpItems.push({
+            title: 'Frete',
+            quantity: 1,
+            unit_price: shippingCost,
+            currency_id: 'BRL',
+          });
+        }
+
+        const preference = await createMercadoPagoPreference({
+          orderId: pedido.id,
+          items: mpItems,
+          payerName: clientName,
+          successUrl: `${origin}/?checkout_success=true&order_id=${pedido.id}`,
+          failureUrl: `${origin}/?checkout_failure=true&order_id=${pedido.id}`,
+          pendingUrl: `${origin}/?checkout_pending=true&order_id=${pedido.id}`,
+          notificationUrl: `${origin}/api/webhooks/mercadopago`,
+        });
+
+        return NextResponse.json({
+          success: true,
+          method: 'MERCADOPAGO',
+          pedidoId: pedido.id,
+          checkoutUrl: preference.init_point,
+          total: finalTotal,
+        });
+      } catch (err) {
+        console.error('[MercadoPago] Falha ao criar preferência:', err);
+        // cai para o tratamento abaixo
+      }
     }
 
-    return NextResponse.json({ success: false, error: 'Método de pagamento inválido' }, { status: 400 });
+    // ── SEGURANÇA: em produção nunca marcamos como PAGO sem pagamento real ────
+    if (process.env.NODE_ENV === 'production') {
+      // Reverte estoque e cancela o pedido que não pôde iniciar pagamento.
+      await Promise.all(
+        itemCreates.map((it) =>
+          db.produto.update({
+            where: { id: it.produtoId },
+            data: { stock: { increment: it.quantity } },
+          })
+        )
+      );
+      await db.pedido.update({ where: { id: pedido.id }, data: { status: 'CANCELADO' } });
+      await invalidateCache('products:list:*');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.',
+        },
+        { status: 502 }
+      );
+    }
+
+    // ── Dev fallback — SOMENTE fora de produção ───────────────────────────────
+    // Marca como pago para permitir testar o fluxo sem credenciais do MP.
+    await db.pedido.update({ where: { id: pedido.id }, data: { status: 'PAGO' } });
+    await db.venda.create({
+      data: { total: finalTotal, paymentMethod, isPresencial: false },
+    });
+
+    return NextResponse.json({
+      success: true,
+      method: 'DEV_SIMULADO',
+      pedidoId: pedido.id,
+      url: `${origin}/?checkout_success=true&order_id=${pedido.id}`,
+      message: 'Modo de desenvolvimento: configure MERCADOPAGO_ACCESS_TOKEN para pagamento real.',
+    });
   } catch (error) {
     console.error('Checkout error:', error);
     const msg = error instanceof Error ? error.message : 'Erro desconhecido';

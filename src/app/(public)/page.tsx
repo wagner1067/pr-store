@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Filter, Sparkles, Phone, ShoppingCart, 
   Trash2, X, Send, HelpCircle, ArrowRight, CheckCircle2,
-  Sun, Moon, Search, ShoppingBag, CreditCard, QrCode, Clipboard
+  Search, ShoppingBag, CreditCard, QrCode, Clipboard
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -166,10 +166,11 @@ export default function Home() {
   const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedBrand, setSelectedBrand] = useState<string>('All');
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const isDarkMode = true;
   const [language, setLanguage] = useState<'pt' | 'en' | 'es'>('pt');
 
   const t = TRANSLATIONS[language];
+
 
   // Fetch live products from API
   useEffect(() => {
@@ -251,15 +252,18 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('checkout_success') === 'true') {
       const orderId = params.get('order_id') || undefined;
-      setCheckoutSuccessInfo({
-        isOpen: true,
-        orderId,
-      });
-      setCart([]); // Clear cart
+      setTimeout(() => {
+        setCheckoutSuccessInfo({
+          isOpen: true,
+          orderId,
+        });
+        setCart([]); // Clear cart
+      }, 0);
       // Remove query parameters from URL safely
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
+
 
   // Countdown timer clock tick
   useEffect(() => {
@@ -370,13 +374,22 @@ export default function Home() {
           clientPhone: customerPhone,
           clientName: customerName,
           shippingCost: shippingCost || 0,
-          shippingMethod: shippingMethod || 'Retirada em Mãos',
+          shippingMethod: shippingMethod || 'RETIRADA',
         }),
       });
 
       const data = await response.json();
       if (data.success) {
-        // PIX flow: show details screen
+        // Mercado Pago Checkout Pro → redireciona ao ambiente de pagamento
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+        // Fluxo PIX legado: show details screen
         setPixDetails({
           qrCode: data.qrCode,
           barcode: data.barcode,
@@ -417,17 +430,21 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: checkoutItems,
-          paymentMethod: 'CARD',
+          paymentMethod: 'CARTAO_CREDITO',
           clientPhone: customerPhone,
           clientName: customerName,
           shippingCost: shippingCost || 0,
-          shippingMethod: shippingMethod || 'Retirada em Mãos',
+          shippingMethod: shippingMethod || 'RETIRADA',
           simulatedCardStatus: simulatedStatus,
         }),
       });
 
       const data = await response.json();
       if (data.success) {
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
         if (data.url && !isRefused) {
           window.location.href = data.url;
         } else {
@@ -539,33 +556,30 @@ export default function Home() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${
-      isDarkMode ? 'bg-[#09090b] text-[#f4f4f5]' : 'bg-white text-zinc-900'
-    }`}>
+    <div className="min-h-screen flex flex-col font-sans bg-[#09090b] text-[#f4f4f5] selection:bg-[#d4af37]/30 selection:text-white">
       
       {/* HEADER INTEGRATION */}
-      <header className={`sticky top-0 z-50 border-b backdrop-blur-md transition-colors ${
-        isDarkMode ? 'bg-[#09090b]/90 border-zinc-800/80' : 'bg-white/95 border-zinc-200'
-      } px-6 py-4 flex items-center justify-between`}>
+      <header className="sticky top-0 z-50 border-b border-zinc-900 bg-[#09090b]/90 backdrop-blur-md px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3 group">
-          {/* Official Logo */}
-          <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-zinc-800 shadow-md">
-            <img src="/logo.jpg" alt="PR Store Logo" className="w-full h-full object-cover" />
+          {/* Official Logo — Elegant Golden Crown */}
+          <div className="relative w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 bg-zinc-950/60 shadow-lg shadow-black group-hover:border-[#d4af37]/40 transition-colors">
+            <svg className="w-6 h-6 text-[#d4af37] drop-shadow-[0_0_8px_rgba(212,175,55,0.5)] transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2 4l3.5 7 6.5-8 6.5 8 3.5-7-1.5 16H3.5L2 4z" />
+            </svg>
           </div>
           <div>
-            <span className={`text-lg font-black tracking-widest uppercase block transition-colors ${
-              isDarkMode ? 'text-white group-hover:text-[#d4af37]' : 'text-[#09090b] group-hover:text-amber-600'
-            }`}>STORE</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-lg font-black tracking-widest uppercase block text-white group-hover:text-[#d4af37] transition-colors">PR STORE</span>
+              <span className="text-[10px] text-[#d4af37] animate-pulse">👑</span>
+            </div>
             <span className="text-[7.5px] font-bold tracking-widest uppercase block -mt-1 text-zinc-500">
-              Moda Masculina e Acessórios
+              Moda Masculina e Acessórios de Luxo
             </span>
           </div>
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className={`hidden lg:flex items-center gap-8 text-xs font-black uppercase tracking-wider ${
-          isDarkMode ? 'text-zinc-400' : 'text-zinc-500'
-        }`}>
+        <nav className="hidden lg:flex items-center gap-8 text-xs font-black uppercase tracking-wider text-zinc-400">
           <Link href="/?category=Marcas" className="hover:text-[#d4af37] transition-colors">Marcas</Link>
           <Link href="/?category=Tenis" className="hover:text-[#d4af37] transition-colors">Tênis</Link>
           <Link href="/?category=Roupas" className="hover:text-[#d4af37] transition-colors">Vestuário</Link>
@@ -573,31 +587,17 @@ export default function Home() {
           <Link href="/?category=Acessorios" className="hover:text-[#d4af37] transition-colors">Acessórios</Link>
         </nav>
 
-        {/* Actions, Theme Switcher & Language Toggles */}
+        {/* Actions, Language Toggles & Cart */}
         <div className="flex items-center gap-5">
           {/* Language toggles */}
-          <div className={`flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border text-[9px] font-extrabold ${
-            isDarkMode ? 'border-zinc-800 text-zinc-500' : 'border-zinc-200 text-zinc-400 bg-zinc-100'
-          }`}>
+          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-[9px] font-extrabold text-zinc-500">
             <button onClick={() => setLanguage('pt')} className={`px-2 py-0.5 rounded transition-all ${language === 'pt' ? 'bg-[#d4af37] text-[#09090b] font-black' : 'hover:text-white'}`}>PT-BR</button>
             <button onClick={() => setLanguage('en')} className={`px-2 py-0.5 rounded transition-all ${language === 'en' ? 'bg-[#d4af37] text-[#09090b] font-black' : 'hover:text-white'}`}>EN</button>
             <button onClick={() => setLanguage('es')} className={`px-2 py-0.5 rounded transition-all ${language === 'es' ? 'bg-[#d4af37] text-[#09090b] font-black' : 'hover:text-white'}`}>ES</button>
           </div>
 
-          {/* Theme switcher */}
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)} 
-            className={`p-2 rounded-full border transition-colors ${
-              isDarkMode ? 'border-zinc-800 text-[#d4af37] hover:bg-zinc-900' : 'border-zinc-200 text-amber-600 hover:bg-zinc-100'
-            }`}
-          >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-
           {/* Search bar button */}
-          <button className={`p-2 rounded-full border transition-colors ${
-            isDarkMode ? 'border-zinc-800 text-zinc-400 hover:bg-zinc-900' : 'border-zinc-200 text-zinc-500 hover:bg-zinc-100'
-          }`}>
+          <button className="p-2 rounded-full border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors">
             <Search className="w-4 h-4" />
           </button>
 
@@ -607,9 +607,7 @@ export default function Home() {
               setCheckoutStep('cart');
               setIsCartOpen(true);
             }}
-            className={`p-2.5 rounded-full border transition-all relative ${
-              isDarkMode ? 'border-zinc-800 text-[#d4af37] hover:bg-zinc-900' : 'border-zinc-200 text-amber-600 hover:bg-zinc-100'
-            }`}
+            className="p-2.5 rounded-full border border-zinc-850 text-[#d4af37] bg-zinc-900/40 hover:bg-zinc-900 hover:border-[#d4af37]/40 transition-all relative"
           >
             <ShoppingBag className="w-4 h-4" />
             {getCartTotalItems() > 0 && (
@@ -622,9 +620,7 @@ export default function Home() {
           {/* ERP access */}
           <Link 
             href="/admin" 
-            className={`hidden sm:flex items-center gap-1.5 text-[9px] font-black uppercase border rounded-full px-3 py-1.5 transition-all ${
-              isDarkMode ? 'border-zinc-800 text-zinc-500 hover:text-[#d4af37] hover:border-[#d4af37]/30' : 'border-zinc-250 text-zinc-600 hover:text-amber-600 hover:border-amber-600/30'
-            }`}
+            className="hidden sm:flex items-center gap-1.5 text-[9px] font-black uppercase border border-zinc-800 rounded-full px-3 py-1.5 text-zinc-400 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all"
           >
             <Sparkles className="w-3 h-3 text-[#d4af37]" />
             ERP Painel
@@ -633,10 +629,9 @@ export default function Home() {
       </header>
 
       {/* 1. Lightning Deal / Promoção Relâmpago Section */}
-      <section className={`relative overflow-hidden border-b transition-colors py-16 px-6 lg:px-12 ${
-        isDarkMode ? 'bg-linear-to-b from-[#121214] via-[#09090b] to-[#09090b] border-zinc-900' : 'bg-linear-to-b from-zinc-50 via-white to-white border-zinc-200'
-      }`}>
+      <section className="relative overflow-hidden border-b border-zinc-900 py-20 px-6 lg:px-12 bg-linear-to-b from-[#121214] via-[#09090b] to-[#09090b]">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+
           
           {/* Details & Clock */}
           <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-left">

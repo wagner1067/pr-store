@@ -75,10 +75,17 @@ export function CartDrawer() {
 
       const data = await res.json();
       if (data.success) {
+        // Mercado Pago Checkout Pro → redireciona ao ambiente de pagamento seguro
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
+        // Fallback de desenvolvimento (sem credenciais do MP) → URL de sucesso
         if (data.url) {
           window.location.href = data.url;
           return;
         }
+        // Fluxo legado (mantido por compatibilidade)
         if (paymentMethod === 'PIX') {
           setPixDetails({ barcode: data.barcode, total: data.total, orderId: data.pedidoId });
           setStep('pix_screen');
@@ -86,6 +93,8 @@ export function CartDrawer() {
           setSuccessInfo({ orderId: data.pedidoId });
           clearCart();
         }
+      } else {
+        alert(data.error || 'Não foi possível iniciar o pagamento. Tente novamente.');
       }
     } catch (err) {
       console.error('Checkout error:', err);
